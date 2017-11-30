@@ -1,0 +1,4 @@
+prettytensor==0.6.2
+progressbar2
+python-dateutil
+ipdb

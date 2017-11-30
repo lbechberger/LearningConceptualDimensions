@@ -1,5 +1,10 @@
 # pickled data files (they are too large)
 *.pickle
+data/
+
+# vanilla_InfoGAN logs etc.
+vanilla_InfoGAN/ckt
+vanilla_InfoGAN/logs
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
