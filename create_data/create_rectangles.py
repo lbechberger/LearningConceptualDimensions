@@ -11,17 +11,21 @@ Created on Wed Nov 29 11:12:51 2017
 
 import sys, pickle
 import numpy as np
+import scipy.ndimage.filters as filters
 
 # read command-line arguments
 number_of_examples = int(sys.argv[1])
 output_filename = sys.argv[2]
 
-image_size = 10#28 # should always be an even number
+image_size = 28 # should always be an even number
+mean = 0.0      # mean of the Gaussian noise
+variance = 0.05 # variance of the Gaussian noise
+sigma = 0.5     # variance of the Gaussian filter
 
 dataset = []
 for i in range(number_of_examples):
     # initialize the image with zeroes
-    matrix = np.zeros(shape=[image_size,image_size])
+    matrix = np.zeros(shape=[image_size, image_size])
     
     # randomly draw width and height 
     width = np.random.choice(range(1,image_size/2))
@@ -34,11 +38,17 @@ for i in range(number_of_examples):
     for row in range(2 * height):
         for column in range(2 * width):
             matrix[start_row + row][start_column + column] = 1.0
-    
-    # TODO: add Gaussian blur (to smooth edges) and/or Gaussian noise (to make image more noisy)    
-    
-    dataset.append(matrix)
 
+    # add Gaussian blur to make edges a bit less crisp
+    blurred = filters.gaussian_filter(matrix, sigma)
+    
+    # let's add some noise to make the images a bit more realistic & to avoid having the same matrix appear over and over again    
+    noise = np.random.normal(mean, variance, [image_size, image_size])
+    added = blurred + noise
+    clipped = np.clip(added, 0.0, 1.0)
+        
+    dataset.append(clipped)
+    
 # dump everything into a pickle file
 with open(output_filename, "wb") as f:
     pickle.dump(dataset, f)
