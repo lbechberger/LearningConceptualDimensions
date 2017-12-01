@@ -27,9 +27,10 @@ if __name__ == "__main__":
     # Batch-size and epochs to be used
     batch_size = 128
     updates_per_epoch = 100
-    max_epoch = 50
+    
+    max_epoch = int(sys.argv[1]) # get from command line 
 
-    exp_name = "rectangle_%s" % timestamp
+    exp_name = "rectangle_{0}_{1}".format(max_epoch, timestamp)
 
     log_dir = os.path.join(root_log_dir, exp_name)
     checkpoint_dir = os.path.join(root_checkpoint_dir, exp_name)
