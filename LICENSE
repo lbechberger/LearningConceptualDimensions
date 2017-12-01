@@ -2,6 +2,9 @@ MIT License
 
 Copyright (c) 2017 Lucas Bechberger
 
+Copyright of the original InfoGAN code remains with OpenAI (see https://github.com/openai/infogan).
+Copyright of the shape modifications of the InfoGAN code remains with Felix Blind & Anke Dittmer (see https://github.com/felixblind/InfoGAN-for-Shapes/).
+
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
 in the Software without restriction, including without limitation the rights
