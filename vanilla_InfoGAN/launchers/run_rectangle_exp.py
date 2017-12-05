@@ -21,8 +21,8 @@ if __name__ == "__main__":
     now = datetime.datetime.now(dateutil.tz.tzlocal())
     timestamp = now.strftime('%Y_%m_%d_%H_%M_%S')
 
-    root_log_dir = "logs/rectangle"
-    root_checkpoint_dir = "ckt/rectangle"
+    root_log_dir = "/net/store/scratch/odd/valid_until_31_jan_2018/lbechberger/logs/rectangle"
+    root_checkpoint_dir = "/net/store/scratch/odd/valid_until_31_jan_2018/lbechberger/ckt/rectangle"
 
     # Batch-size and epochs to be used
     batch_size = 128
