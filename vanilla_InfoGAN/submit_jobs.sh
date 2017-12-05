@@ -5,6 +5,5 @@ while read P1
 do
 	echo "Starting job $1 $P1..."
 	qsub $1 $P1
-	sleep 60 
 done < $2
 exit
