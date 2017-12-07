@@ -1,4 +1,4 @@
-# LearningConceputalDimensions
+# LearningConceptualDimensions
 
 The code in this repository is used to explore whether deep represenation learning is able to learn interpretable dimensions for the domain of shapes.
 
