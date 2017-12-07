@@ -14,8 +14,17 @@ import dateutil.tz
 import datetime
 import numpy as np
 import pickle
+import ConfigParser
 
 if __name__ == "__main__":
+
+    config_name = sys.argv[1]
+    config = ConfigParser.RawConfigParser()
+    config.read("rectangle.cfg")
+    
+    max_epoch = config.getint(config_name, "max_epoch")
+    training_file = config.get(config_name, "training_file")
+    size_z = config.getint(config_name, "size_z")
 
     # the date is needed for the logs
     now = datetime.datetime.now(dateutil.tz.tzlocal())
@@ -28,9 +37,8 @@ if __name__ == "__main__":
     batch_size = 128
     updates_per_epoch = 100
     
-    max_epoch = int(sys.argv[1]) # get from command line 
-
-    exp_name = "rectangle_{0}_{1}".format(max_epoch, timestamp)
+    
+    exp_name = "rectangle_{0}_{1}".format(config_name, timestamp)
 
     log_dir = os.path.join(root_log_dir, exp_name)
     checkpoint_dir = os.path.join(root_checkpoint_dir, exp_name)
@@ -39,7 +47,7 @@ if __name__ == "__main__":
     mkdir_p(checkpoint_dir)
 
     # load the rectangle data
-    rectangles = np.array(pickle.load(open('../data/rectangles.pickle', 'rb')))
+    rectangles = np.array(pickle.load(open(training_file, 'rb')))
 
     # ShapeDataset has a fixed height and widht of 28 pixels and only one 
     # matrix per image (grey-scale)
@@ -51,7 +59,7 @@ if __name__ == "__main__":
     # Possible would be also e.g. Categorical(10), True) for 
     # a categorical variable with 10 Steps.
     latent_spec = [
-        (Uniform(62), False),
+        (Uniform(size_z), False),
         (Uniform(1, fix_std=True), True),
         (Uniform(1, fix_std=True), True),
     ]
