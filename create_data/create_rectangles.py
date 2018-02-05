@@ -18,6 +18,7 @@ number_of_examples = int(sys.argv[1])
 output_filename = sys.argv[2]
 
 image_size = 28 # should always be an even number
+half_img_size = int(image_size/2)
 mean = 0.0      # mean of the Gaussian noise
 variance = 0.05 # variance of the Gaussian noise
 sigma = 0.5     # variance of the Gaussian filter
@@ -28,12 +29,12 @@ for i in range(number_of_examples):
     matrix = np.zeros(shape=[image_size, image_size])
     
     # randomly draw width and height 
-    width = np.random.choice(range(1,image_size/2))
-    height = np.random.choice(range(1,image_size/2))
+    width = np.random.choice(range(1,half_img_size))
+    height = np.random.choice(range(1,half_img_size))
     
     # now set all the pixels inside the rectangle to 1
-    start_row = (image_size - 2 * height) / 2
-    start_column = (image_size - 2 * width) / 2
+    start_row = int((image_size - 2 * height) / 2)
+    start_column = int((image_size - 2 * width) / 2)
     
     for row in range(2 * height):
         for column in range(2 * width):
