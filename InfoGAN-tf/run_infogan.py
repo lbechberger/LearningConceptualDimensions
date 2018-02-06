@@ -130,7 +130,7 @@ def get_infogan_noise(batch_size, categorical_dim, structured_continuous_dim,
 
 
 # Build the generator and discriminator.
-cat_dim, cont_dim = 10, 2        
+cat_dim, cont_dim = 1, 2        
 
 generator_fn = functools.partial(infogan_generator, categorical_dim=cat_dim)
 discriminator_fn = functools.partial(infogan_discriminator, categorical_dim=cat_dim, continuous_dim=cont_dim)
@@ -144,20 +144,15 @@ gan_model = tfgan.infogan_model(
     structured_generator_inputs=structured_inputs)
 
 # Build the GAN loss.
-with tf.name_scope('loss'):
-    mutual_information_penalty_weight = 1.0
-    gan_loss = tfgan.gan_loss(gan_model, gradient_penalty_weight=1.0, 
-                              mutual_information_penalty_weight=mutual_information_penalty_weight, add_summaries=True)
+gan_loss = tfgan.gan_loss(gan_model, gradient_penalty_weight=1.0, mutual_information_penalty_weight=1.0, add_summaries=True)
 
 # Create the train ops, which calculate gradients and apply updates to weights.
-with tf.name_scope('train'):
-        
-    train_ops = tfgan.gan_train_ops(
-        gan_model,
-        gan_loss,
-        generator_optimizer=tf.train.AdamOptimizer(FLAGS.gen_lr, 0.5),
-        discriminator_optimizer=tf.train.AdamOptimizer(FLAGS.dis_lr, 0.5),
-        summarize_gradients=True)
+train_ops = tfgan.gan_train_ops(
+    gan_model,
+    gan_loss,
+    generator_optimizer=tf.train.AdamOptimizer(FLAGS.gen_lr, 0.5),
+    discriminator_optimizer=tf.train.AdamOptimizer(FLAGS.dis_lr, 0.5),
+    summarize_gradients=True)
 
 status_message = tf.string_join(['Starting train step: ', tf.as_string(tf.train.get_or_create_global_step())], name='status_message')
 
@@ -165,46 +160,6 @@ train_step_fn = tfgan.get_sequential_train_steps()
 
 global_step = tf.train.get_or_create_global_step()
 loss_values, mnist_score_values  = [], []
-
-def get_eval_noise_categorical(
-    noise_samples, categorical_sample_points, continuous_sample_points,
-    unstructured_noise_dims, continuous_noise_dims):
-  """Create noise showing impact of categorical noise in InfoGAN.
-  Categorical noise is constant across columns. Other noise is constant across
-  rows.
-  Args:
-    noise_samples: Number of non-categorical noise samples to use.
-    categorical_sample_points: Possible categorical noise points to sample.
-    continuous_sample_points: Possible continuous noise points to sample.
-    unstructured_noise_dims: Dimensions of the unstructured noise.
-    continuous_noise_dims: Dimensions of the continuous noise.
-  Returns:
-    Unstructured noise, categorical noise, continuous noise numpy arrays. Each
-    should have shape [noise_samples, ?].
-  """
-  rows, cols = noise_samples, len(categorical_sample_points)
-
-  # Take random draws for non-categorical noise, making sure they are constant
-  # across columns.
-  unstructured_noise = []
-  for _ in xrange(rows):
-    cur_sample = np.random.normal(size=[1, unstructured_noise_dims])
-    unstructured_noise.extend([cur_sample] * cols)
-  unstructured_noise = np.concatenate(unstructured_noise)
-
-  continuous_noise = []
-  for _ in xrange(rows):
-    cur_sample = np.random.choice(
-        continuous_sample_points, size=[1, continuous_noise_dims])
-    continuous_noise.extend([cur_sample] * cols)
-  continuous_noise = np.concatenate(continuous_noise)
-
-  # Increase categorical noise from left to right, making sure they are constant
-  # across rows.
-  categorical_noise = np.tile(categorical_sample_points, rows)
-
-  return unstructured_noise, categorical_noise, continuous_noise
-
 
 def get_eval_noise_continuous_dim1(
     noise_samples, categorical_sample_points, continuous_sample_points,
@@ -308,23 +263,19 @@ with tf.Session() as sess:
     
     # now create some output images
 
-    CAT_SAMPLE_POINTS = np.arange(0, 10)
+    CAT_SAMPLE_POINTS = np.arange(0, 1)
     CONT_SAMPLE_POINTS = np.linspace(-2.0, 2.0, 10)
     noise_args = (FLAGS.noise_dims, CAT_SAMPLE_POINTS, CONT_SAMPLE_POINTS,
                   FLAGS.noise_dims - cont_dim, cont_dim)
     # Use fixed noise vectors to illustrate the effect of each dimension.
-    display_noise1 = get_eval_noise_categorical(*noise_args)
     display_noise2 = get_eval_noise_continuous_dim1(*noise_args)
     display_noise3 = get_eval_noise_continuous_dim2(*noise_args)
     
-    with tf.variable_scope('Generator', reuse=True):
-        categorical_images = generator_fn(display_noise1)
     with tf.variable_scope('Generator', reuse=True):
         continuous1_images = generator_fn(display_noise2)
     with tf.variable_scope('Generator', reuse=True):
         continuous2_images = generator_fn(display_noise3)
     
-    reshaped_categorical_img = tfgan.eval.image_reshaper(categorical_images, num_cols=len(CAT_SAMPLE_POINTS))
     reshaped_continuous1_img = tfgan.eval.image_reshaper(continuous1_images, num_cols=len(CONT_SAMPLE_POINTS))
     reshaped_continuous2_img = tfgan.eval.image_reshaper(continuous2_images, num_cols=len(CONT_SAMPLE_POINTS))
     
@@ -332,12 +283,10 @@ with tf.Session() as sess:
       image = (image * 255.0)
       return tf.cast(image, tf.uint8)
       
-    uint8_categorical = float_image_to_uint8(reshaped_categorical_img)
     uint8_continuous1 = float_image_to_uint8(reshaped_continuous1_img)
     uint8_continuous2 = float_image_to_uint8(reshaped_continuous2_img)
     
     image_write_ops = []
-    image_write_ops.append(tf.write_file(os.path.join(FLAGS.output_dir, "categorical.png"), tf.image.encode_png(uint8_categorical[0])))
     image_write_ops.append(tf.write_file(os.path.join(FLAGS.output_dir, "continuous1.png"), tf.image.encode_png(uint8_continuous1[0])))
     image_write_ops.append(tf.write_file(os.path.join(FLAGS.output_dir, "continuous2.png"), tf.image.encode_png(uint8_continuous2[0])))
     sess.run(image_write_ops)
