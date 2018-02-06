@@ -28,8 +28,11 @@ FLAGS = flags.FLAGS
 # Set up the input.
 rectangles = np.array(pickle.load(open(FLAGS.training_file, 'rb')), dtype=np.float32)
 print(rectangles.shape)
-images = rectangles[:FLAGS.batch_size].reshape((-1, 28, 28, 1))
-print(images.shape)
+images = rectangles.reshape((-1, 28, 28, 1))
+dataset = tf.data.Dataset.from_tensor_slices(images)
+dataset = dataset.shuffle(20000).repeat().batch(FLAGS.batch_size)
+batch_images = dataset.make_one_shot_iterator().get_next()
+print(images.shape, batch_images.shape)
 
 noise = tf.random_normal([FLAGS.batch_size, FLAGS.noise_dims], dtype=tf.float32)
 
@@ -50,14 +53,6 @@ def unconditional_generator(generator_inputs):
     
         return net    
 
-#    with tf.contrib.framework.arg_scope(
-#      [layers.fully_connected, layers.conv2d_transpose],
-#      activation_fn=tf.nn.relu, normalizer_fn=None,
-#      weights_regularizer=layers.l2_regularizer(2.5e-5)):
-#          net = tf.contrib.layers.fully_connected(generator_inputs, 28*28, activation_fn=tf.nn.sigmoid)
-#          net = tf.cast(net, tf.float32)
-#          return tf.reshape(net, shape=(-1,28,28,1))
-
 _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.01)
 
 def unconditional_discriminator(discriminator_inputs, generator_inputs):
@@ -73,21 +68,13 @@ def unconditional_discriminator(discriminator_inputs, generator_inputs):
 
         return net
 
-#    with tf.contrib.framework.arg_scope(
-#      [layers.conv2d, layers.fully_connected],
-#      activation_fn=_leaky_relu, normalizer_fn=None,
-#      weights_regularizer=layers.l2_regularizer(2.5e-5), biases_regularizer=layers.l2_regularizer(2.5e-5)):
-#          net = tf.contrib.layers.fully_connected(discriminator_inputs, 1, activation_fn=tf.nn.sigmoid)
-#          net = tf.cast(net, tf.float32)
-#          return net
-
 # Build the generator and discriminator.
 gan_model = tfgan.gan_model(
     generator_fn=unconditional_generator,  
     discriminator_fn=unconditional_discriminator,  
-    real_data=images,
+    real_data=batch_images,#images,
     generator_inputs=noise)
-tfgan.eval.add_gan_model_image_summaries(gan_model, FLAGS.grid_size)
+#tfgan.eval.add_gan_model_image_summaries(gan_model, FLAGS.grid_size)
 
 # Build the GAN loss.
 gan_loss = tfgan.gan_loss(
@@ -103,13 +90,6 @@ train_ops = tfgan.gan_train_ops(
     discriminator_optimizer=tf.train.AdamOptimizer(FLAGS.dis_lr, 0.5))
 
 status_message = tf.string_join(['Starting train step: ', tf.as_string(tf.train.get_or_create_global_step())], name='status_message')
-
-# Run the train ops in the alternating training scheme.
-#tfgan.gan_train(
-#    train_ops,
-#    hooks=[tf.train.StopAtStepHook(num_steps=FLAGS.max_number_of_steps), tf.train.LoggingTensorHook([status_message], every_n_iter=1)],
-#    logdir=FLAGS.train_log_dir,
-#    get_hooks_fn = tfgan.get_joint_train_hooks())
 
 train_step_fn = tfgan.get_sequential_train_steps()
 
@@ -138,16 +118,3 @@ with tf.Session() as sess:
     sess.run(image_write_ops)
     print("done evaluating")
 
-#with tf.variable_scope('Generator', reuse=True):
-#    images = unconditional_generator(tf.random_normal([100, FLAGS.noise_dims]))
-#reshaped_images = tfgan.eval.image_reshaper(images, num_cols=10)
-#def float_image_to_uint8(image):
-#  image = (image * 128.0)
-#  return tf.cast(image, tf.uint8)
-#  
-#uint8_images = float_image_to_uint8(reshaped_images)
-#image_write_ops = tf.write_file("./images.png", tf.image.encode_png(uint8_images[0]))
-#tf.contrib.training.evaluate_repeatedly(FLAGS.train_log_dir, 
-#                                        hooks=[tf.contrib.training.SummaryAtEndHook(FLAGS.train_log_dir), tf.contrib.training.StopAfterNEvalsHook(1)], 
-#                                               eval_ops=image_write_ops, max_number_of_evaluations=1)
-#
