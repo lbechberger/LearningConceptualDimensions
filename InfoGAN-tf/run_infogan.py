@@ -49,15 +49,13 @@ print(images.shape, batch_images.shape)
 
 noise = tf.random_normal([FLAGS.batch_size, FLAGS.noise_dims], dtype=tf.float32)
 
-# generator_inputs = []
-def infogan_generator(inputs, categorical_dim):
+def infogan_generator(inputs):
     with tf.contrib.framework.arg_scope(
       [layers.fully_connected, layers.conv2d_transpose],
       activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
       weights_regularizer=layers.l2_regularizer(2.5e-5)):
-        unstructured_noise, cat_noise, cont_noise = inputs
-        cat_noise_onehot = tf.one_hot(cat_noise, categorical_dim)
-        noise = tf.concat([unstructured_noise, cat_noise_onehot, cont_noise], axis=1)
+        unstructured_noise, cont_noise = inputs
+        noise = tf.concat([unstructured_noise, cont_noise], axis=1)
         net = layers.fully_connected(noise, 1024)
         net = layers.fully_connected(net, 7 * 7 * 128)
         net = tf.reshape(net, [-1, 7, 7, 128])
@@ -71,7 +69,7 @@ def infogan_generator(inputs, categorical_dim):
 
 _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.01)
 
-def infogan_discriminator(img, unused_conditioning, weight_decay=2.5e-5, categorical_dim=10, continuous_dim=2):
+def infogan_discriminator(img, unused_conditioning, weight_decay=2.5e-5, continuous_dim=2):
     with tf.contrib.framework.arg_scope(
     [layers.conv2d, layers.fully_connected],
     activation_fn=_leaky_relu, normalizer_fn=None,
@@ -86,55 +84,45 @@ def infogan_discriminator(img, unused_conditioning, weight_decay=2.5e-5, categor
     with tf.contrib.framework.arg_scope([layers.batch_norm], is_training=False):
         encoder = layers.fully_connected(net, 128, normalizer_fn=layers.batch_norm, activation_fn=_leaky_relu)
 
-    # Compute logits for each category of categorical latent.
-    logits_cat = layers.fully_connected(encoder, categorical_dim, activation_fn=None)
-    q_cat = ds.Categorical(logits_cat)
-    
     # Compute mean for Gaussian posterior of continuous latents.
     mu_cont = layers.fully_connected(encoder, continuous_dim, activation_fn=None)
     sigma_cont = tf.ones_like(mu_cont)
     q_cont = ds.Normal(loc=mu_cont, scale=sigma_cont)
 
-    return logits_real, [q_cat, q_cont]
+    return logits_real, [q_cont]
 
 
-def get_infogan_noise(batch_size, categorical_dim, structured_continuous_dim,
+def get_infogan_noise(batch_size, structured_continuous_dim,
                       total_continuous_noise_dims):
   """Get unstructured and structured noise for InfoGAN.
   Args:
     batch_size: The number of noise vectors to generate.
-    categorical_dim: The number of categories in the categorical noise.
     structured_continuous_dim: The number of dimensions of the uniform
       continuous noise.
     total_continuous_noise_dims: The number of continuous noise dimensions. This
       number includes the structured and unstructured noise.
   Returns:
     A 2-tuple of structured and unstructured noise. First element is the
-    unstructured noise, and the second is a 2-tuple of
-    (categorical structured noise, continuous structured noise).
+    unstructured noise, and the second is the continuous structured noise.
   """
   # Get unstructurd noise.
   unstructured_noise = tf.random_normal(
       [batch_size, total_continuous_noise_dims - structured_continuous_dim])
-
-  # Get categorical noise Tensor.
-  categorical_dist = ds.Categorical(logits=tf.zeros([categorical_dim]))
-  categorical_noise = categorical_dist.sample([batch_size])
 
   # Get continuous noise Tensor.
   continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]),
                                tf.ones([structured_continuous_dim]))
   continuous_noise = continuous_dist.sample([batch_size])
 
-  return [unstructured_noise], [categorical_noise, continuous_noise]
+  return [unstructured_noise], [continuous_noise]
 
 
 # Build the generator and discriminator.
-cat_dim, cont_dim = 1, 2        
+cont_dim = 2        
 
-generator_fn = functools.partial(infogan_generator, categorical_dim=cat_dim)
-discriminator_fn = functools.partial(infogan_discriminator, categorical_dim=cat_dim, continuous_dim=cont_dim)
-unstructured_inputs, structured_inputs = get_infogan_noise(FLAGS.batch_size, cat_dim, cont_dim, FLAGS.noise_dims)
+generator_fn = functools.partial(infogan_generator)
+discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=cont_dim)
+unstructured_inputs, structured_inputs = get_infogan_noise(FLAGS.batch_size, cont_dim, FLAGS.noise_dims)
 
 gan_model = tfgan.infogan_model(
     generator_fn=generator_fn,
@@ -162,19 +150,18 @@ global_step = tf.train.get_or_create_global_step()
 loss_values, mnist_score_values  = [], []
 
 def get_eval_noise_continuous_dim1(
-    noise_samples, categorical_sample_points, continuous_sample_points,
-    unstructured_noise_dims, continuous_noise_dims):  # pylint:disable=unused-argument
+    noise_samples, continuous_sample_points,
+    unstructured_noise_dims, continuous_noise_dims):  
   """Create noise showing impact of first dim continuous noise in InfoGAN.
   First dimension of continuous noise is constant across columns. Other noise is
   constant across rows.
   Args:
     noise_samples: Number of non-categorical noise samples to use.
-    categorical_sample_points: Possible categorical noise points to sample.
     continuous_sample_points: Possible continuous noise points to sample.
     unstructured_noise_dims: Dimensions of the unstructured noise.
     continuous_noise_dims: Dimensions of the continuous noise.
   Returns:
-    Unstructured noise, categorical noise, continuous noise numpy arrays.
+    Unstructured noise, continuous noise numpy arrays.
   """
   rows, cols = noise_samples, len(continuous_sample_points)
 
@@ -185,12 +172,6 @@ def get_eval_noise_continuous_dim1(
     cur_sample = np.random.normal(size=[1, unstructured_noise_dims])
     unstructured_noise.extend([cur_sample] * cols)
   unstructured_noise = np.concatenate(unstructured_noise)
-
-  categorical_noise = []
-  for _ in xrange(rows):
-    cur_sample = np.random.choice(categorical_sample_points)
-    categorical_noise.extend([cur_sample] * cols)
-  categorical_noise = np.array(categorical_noise)
 
   cont_noise_dim2 = []
   for _ in xrange(rows):
@@ -204,23 +185,22 @@ def get_eval_noise_continuous_dim1(
 
   continuous_noise = np.concatenate((cont_noise_dim1, cont_noise_dim2), 1)
 
-  return unstructured_noise, categorical_noise, continuous_noise
+  return unstructured_noise.astype('float32'), continuous_noise.astype('float32')
 
 
 def get_eval_noise_continuous_dim2(
-    noise_samples, categorical_sample_points, continuous_sample_points,
-    unstructured_noise_dims, continuous_noise_dims):  # pylint:disable=unused-argument
+    noise_samples, continuous_sample_points,
+    unstructured_noise_dims, continuous_noise_dims):  
   """Create noise showing impact of second dim of continuous noise in InfoGAN.
   Second dimension of continuous noise is constant across columns. Other noise
   is constant across rows.
   Args:
     noise_samples: Number of non-categorical noise samples to use.
-    categorical_sample_points: Possible categorical noise points to sample.
     continuous_sample_points: Possible continuous noise points to sample.
     unstructured_noise_dims: Dimensions of the unstructured noise.
     continuous_noise_dims: Dimensions of the continuous noise.
   Returns:
-    Unstructured noise, categorical noise, continuous noise numpy arrays.
+    Unstructured noise, continuous noise numpy arrays.
   """
   rows, cols = noise_samples, len(continuous_sample_points)
 
@@ -232,25 +212,19 @@ def get_eval_noise_continuous_dim2(
     unstructured_noise.extend([cur_sample] * cols)
   unstructured_noise = np.concatenate(unstructured_noise)
 
-  categorical_noise = []
-  for _ in xrange(rows):
-    cur_sample = np.random.choice(categorical_sample_points)
-    categorical_noise.extend([cur_sample] * cols)
-  categorical_noise = np.array(categorical_noise)
-
   cont_noise_dim1 = []
   for _ in xrange(rows):
     cur_sample = np.random.choice(continuous_sample_points, size=[1, 1])
     cont_noise_dim1.extend([cur_sample] * cols)
   cont_noise_dim1 = np.concatenate(cont_noise_dim1)
-
-  # Increase first dimension of continuous noise from left to right, making sure
+  
+  # Increase second dimension of continuous noise from left to right, making sure
   # they are constant across rows.
   cont_noise_dim2 = np.expand_dims(np.tile(continuous_sample_points, rows), 1)
 
   continuous_noise = np.concatenate((cont_noise_dim1, cont_noise_dim2), 1)
 
-  return unstructured_noise, categorical_noise, continuous_noise
+  return unstructured_noise.astype('float32'), continuous_noise.astype('float32')
 
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
@@ -262,10 +236,8 @@ with tf.Session() as sess:
     print("done training")
     
     # now create some output images
-
-    CAT_SAMPLE_POINTS = np.arange(0, 1)
     CONT_SAMPLE_POINTS = np.linspace(-2.0, 2.0, 10)
-    noise_args = (FLAGS.noise_dims, CAT_SAMPLE_POINTS, CONT_SAMPLE_POINTS,
+    noise_args = (FLAGS.noise_dims, CONT_SAMPLE_POINTS,
                   FLAGS.noise_dims - cont_dim, cont_dim)
     # Use fixed noise vectors to illustrate the effect of each dimension.
     display_noise2 = get_eval_noise_continuous_dim1(*noise_args)
