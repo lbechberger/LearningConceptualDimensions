@@ -7,6 +7,7 @@ Created on Thu Jan 25 2018
 
 import pickle
 import numpy as np
+import os
 
 import tensorflow as tf
 tfgan = tf.contrib.gan
@@ -15,6 +16,7 @@ layers = tf.contrib.layers
 
 flags.DEFINE_integer('batch_size', 32, 'The number of images in each batch.')
 flags.DEFINE_string('train_log_dir', 'logs', 'Directory where to write event logs.')
+flags.DEFINE_string('output_dir', 'output', 'Directory where to store output images.')
 flags.DEFINE_integer('max_number_of_steps', 1000, 'The maximum number of gradient steps.')
 flags.DEFINE_string('gan_type', 'unconditional', 'Either `unconditional`, `conditional`, or `infogan`.')
 flags.DEFINE_integer('grid_size', 5, 'Grid size for image visualization.')
@@ -46,8 +48,7 @@ def unconditional_generator(generator_inputs):
         net = tf.reshape(net, [-1, 7, 7, 128])
         net = layers.conv2d_transpose(net, 64, [4, 4], stride=2)
         net = layers.conv2d_transpose(net, 32, [4, 4], stride=2)
-        # Make sure that generator output is in the same range as `inputs`
-        # ie [0, 1].
+        # Make sure that generator output is in the same range as `inputs`, i.e. [0, 1].
         net = layers.conv2d(
             net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.sigmoid)
     
@@ -74,7 +75,6 @@ gan_model = tfgan.gan_model(
     discriminator_fn=unconditional_discriminator,  
     real_data=batch_images,#images,
     generator_inputs=noise)
-#tfgan.eval.add_gan_model_image_summaries(gan_model, FLAGS.grid_size)
 
 # Build the GAN loss.
 gan_loss = tfgan.gan_loss(
@@ -114,7 +114,7 @@ with tf.Session() as sess:
       return tf.cast(image, tf.uint8)
       
     uint8_images = float_image_to_uint8(reshaped_images)
-    image_write_ops = tf.write_file("./images.png", tf.image.encode_png(uint8_images[0]))
+    image_write_ops = tf.write_file(os.path.join(FLAGS.output_dir, "images.png"), tf.image.encode_png(uint8_images[0]))
     sess.run(image_write_ops)
     print("done evaluating")
 

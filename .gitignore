@@ -1,13 +1,14 @@
 # pickled data files (they are too large)
 *.pickle
-data/
+data/*
 
 # vanilla_InfoGAN logs etc.
 vanilla_InfoGAN/ckt
 vanilla_InfoGAN/logs
 
 # InfoGAN-tf etc.
-InfoGAN-tf/logs
+InfoGAN-tf/logs/*
+InfoGAN-tf/output/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
