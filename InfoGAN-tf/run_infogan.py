@@ -14,35 +14,50 @@ Created on Thu Jan 25 2018
 
 import pickle
 import numpy as np
-import os
+import os, sys
 
 import tensorflow as tf
 tfgan = tf.contrib.gan
-flags = tf.flags
 layers = tf.contrib.layers
 ds = tf.contrib.distributions
 
 import functools
 from six.moves import xrange
 
-flags.DEFINE_integer('batch_size', 128, 'The number of images in each batch.')
-flags.DEFINE_string('train_log_dir', 'logs', 'Directory where to write event logs.')
-flags.DEFINE_string('output_dir', 'output', 'Directory where to store output images.')
-flags.DEFINE_integer('num_epochs', 50, 'The number of epochs to train.')
-flags.DEFINE_integer('noise_dims', 64, 'Dimensions of the generator noise vector.')
-flags.DEFINE_integer('latent_dims', 2, 'Number of latent variables.')
-flags.DEFINE_string('training_file', '../data/rectangles_v0.05_s0.5.pickle', 'Pickle file of images to use.')
-flags.DEFINE_float('gen_lr', 1e-3, 'Learning rate for the generator.')
-flags.DEFINE_float('dis_lr', 9e-5, 'Learning rate for the discriminator.')
+from configparser import RawConfigParser
 
-FLAGS = flags.FLAGS
+options = {}
+options['train_log_dir'] = 'logs'
+options['output_dir'] = 'output'
+options['training_file'] = '../data/rectangles_v0.05_s0.5.pickle'
+options['batch_size'] = 128
+options['num_epochs'] = 50
+options['noise_dims'] = 64
+options['latent_dims'] = 2
+options['gen_lr'] = 1e-3
+options['dis_lr'] = 9e-5
+
+config_name = sys.argv[1]
+config = RawConfigParser(options)
+config.read("infogan.cfg")
+
+if config.has_section(config_name):
+    options['train_log_dir'] = config.get(config_name, 'train_log_dir')
+    options['output_dir'] = config.get(config_name, 'output_dir')
+    options['training_file'] = config.get(config_name, 'training_file')
+    options['batch_size'] = config.getint(config_name, 'batch_size')
+    options['num_epochs'] = config.getint(config_name, 'num_epochs')
+    options['noise_dims'] = config.getint(config_name, 'noise_dims')
+    options['latent_dims'] = config.getint(config_name, 'latent_dims')
+    options['gen_lr'] = config.getfloat(config_name, 'gen_lr')
+    options['dis_lr'] = config.getfloat(config_name, 'dis_lr')
 
 # Set up the input.
-rectangles = np.array(pickle.load(open(FLAGS.training_file, 'rb')), dtype=np.float32)
+rectangles = np.array(pickle.load(open(options['training_file'], 'rb')), dtype=np.float32)
 length_of_data_set = len(rectangles)
 images = rectangles.reshape((-1, 28, 28, 1))
 dataset = tf.data.Dataset.from_tensor_slices(images)
-dataset = dataset.shuffle(20000).repeat().batch(FLAGS.batch_size)
+dataset = dataset.shuffle(20000).repeat().batch(options['batch_size'])
 batch_images = dataset.make_one_shot_iterator().get_next()
 
 # architecture of the generator network
@@ -156,8 +171,8 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
 
 
 # Build the generator and discriminator.
-discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=FLAGS.latent_dims)
-unstructured_inputs, structured_inputs = get_training_noise(FLAGS.batch_size, FLAGS.latent_dims, FLAGS.noise_dims)
+discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'])
+unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'], options['noise_dims'])
 
 gan_model = tfgan.infogan_model(
     generator_fn=infogan_generator,
@@ -173,8 +188,8 @@ gan_loss = tfgan.gan_loss(gan_model, gradient_penalty_weight=1.0, mutual_informa
 train_ops = tfgan.gan_train_ops(
     gan_model,
     gan_loss,
-    generator_optimizer=tf.train.AdamOptimizer(FLAGS.gen_lr, 0.5),
-    discriminator_optimizer=tf.train.AdamOptimizer(FLAGS.dis_lr, 0.5),
+    generator_optimizer=tf.train.AdamOptimizer(options['gen_lr'], 0.5),
+    discriminator_optimizer=tf.train.AdamOptimizer(options['dis_lr'], 0.5),
     summarize_gradients=True)
 
 
@@ -182,7 +197,7 @@ train_ops = tfgan.gan_train_ops(
 train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
-number_of_steps = int( (FLAGS.num_epochs * length_of_data_set) / FLAGS.batch_size )
+number_of_steps = int( (options['num_epochs'] * length_of_data_set) / options['batch_size'] )
 
 with tf.Session() as sess:
     # train the network
@@ -196,8 +211,8 @@ with tf.Session() as sess:
     
     # now create some output images
     CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
-    for i in range(FLAGS.latent_dims):
-        display_noise = get_eval_noise(FLAGS.noise_dims, CONT_SAMPLE_POINTS, FLAGS.latent_dims, i)
+    for i in range(options['latent_dims']):
+        display_noise = get_eval_noise(options['noise_dims'], CONT_SAMPLE_POINTS, options['latent_dims'], i)
         with tf.variable_scope('Generator', reuse=True):
             continuous_image = infogan_generator(display_noise)
         reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
@@ -208,7 +223,8 @@ with tf.Session() as sess:
           
         uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
         
-        image_write_op = tf.write_file(os.path.join(FLAGS.output_dir, "continuous{0}.png".format(i)), tf.image.encode_png(uint8_continuous[0]))
+        image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}_continuous{1}.png".format(config_name, i)), 
+                                                    tf.image.encode_png(uint8_continuous[0]))
         sess.run(image_write_op)
            
     print("done evaluating")
