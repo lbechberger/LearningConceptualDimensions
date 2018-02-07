@@ -165,18 +165,27 @@ def get_eval_noise_continuous_dim(noise_dims, continuous_sample_points, latent_d
 
     cont_noise_other_dim = []
     for _ in xrange(rows):
-        cur_sample = np.random.choice(continuous_sample_points, size=[1, 1])
+        cur_sample = np.random.choice(continuous_sample_points, size=[1, latent_dims-1])
         cont_noise_other_dim.extend([cur_sample] * cols)
     cont_noise_other_dim = np.concatenate(cont_noise_other_dim)
-
-    # Increase first dimension of continuous noise from left to right, making sure hey are constant across rows.
+    
+    # Increase evaluated dimension of continuous noise from left to right, making sure they are constant across rows.
     cont_noise_evaluated_dim = np.expand_dims(np.tile(continuous_sample_points, rows), 1)
-
+    
     if idx == 0:
+        # first dimension is the one to be evaluated
         continuous_noise = np.concatenate((cont_noise_evaluated_dim, cont_noise_other_dim), 1)
-    else:
+    elif idx == latent_dims - 1:
+        # last dimension is the one to be evaluated
         continuous_noise = np.concatenate((cont_noise_other_dim, cont_noise_evaluated_dim), 1)
-
+    else:
+        # intermediate dimension is to be evaluated --> split other_dims_list in two parts
+        other_dims_list = np.split(cont_noise_other_dim, latent_dims - 1, axis=1)
+        first = np.concatenate(other_dims_list[:idx], 1)
+        second = np.concatenate(other_dims_list[idx:], 1)
+        # sneak cont_noise_evaluated_dim in the middle and glue everything back together
+        continuous_noise = np.concatenate((first, cont_noise_evaluated_dim, second), 1)
+    
     return unstructured_noise.astype('float32'), continuous_noise.astype('float32')
 
 
@@ -191,28 +200,20 @@ with tf.Session() as sess:
     
     # now create some output images
     CONT_SAMPLE_POINTS = np.linspace(-2.0, 2.0, 10)
-    display_noise2 = get_eval_noise_continuous_dim(FLAGS.noise_dims, CONT_SAMPLE_POINTS, FLAGS.latent_dims, 0)
-    display_noise3 = get_eval_noise_continuous_dim(FLAGS.noise_dims, CONT_SAMPLE_POINTS, FLAGS.latent_dims, 1)
-    
-    with tf.variable_scope('Generator', reuse=True):
-        continuous1_images = infogan_generator(display_noise2)
-    with tf.variable_scope('Generator', reuse=True):
-        continuous2_images = infogan_generator(display_noise3)
-    
-    reshaped_continuous1_img = tfgan.eval.image_reshaper(continuous1_images, num_cols=len(CONT_SAMPLE_POINTS))
-    reshaped_continuous2_img = tfgan.eval.image_reshaper(continuous2_images, num_cols=len(CONT_SAMPLE_POINTS))
-    
-    def float_image_to_uint8(image):
-      image = (image * 255.0)
-      return tf.cast(image, tf.uint8)
-      
-    uint8_continuous1 = float_image_to_uint8(reshaped_continuous1_img)
-    uint8_continuous2 = float_image_to_uint8(reshaped_continuous2_img)
-    
-    image_write_ops = []
-    image_write_ops.append(tf.write_file(os.path.join(FLAGS.output_dir, "continuous1.png"), tf.image.encode_png(uint8_continuous1[0])))
-    image_write_ops.append(tf.write_file(os.path.join(FLAGS.output_dir, "continuous2.png"), tf.image.encode_png(uint8_continuous2[0])))
-    sess.run(image_write_ops)
-    
+    for i in range(FLAGS.latent_dims):
+        display_noise = get_eval_noise_continuous_dim(FLAGS.noise_dims, CONT_SAMPLE_POINTS, FLAGS.latent_dims, i)
+        with tf.variable_scope('Generator', reuse=True):
+            continuous_image = infogan_generator(display_noise)
+        reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
+
+        def float_image_to_uint8(image):
+            image = (image * 255.0)
+            return tf.cast(image, tf.uint8)
+          
+        uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
+        
+        image_write_op = tf.write_file(os.path.join(FLAGS.output_dir, "continuous{0}.png".format(i)), tf.image.encode_png(uint8_continuous[0]))
+        sess.run(image_write_op)
+           
     print("done evaluating")
 
