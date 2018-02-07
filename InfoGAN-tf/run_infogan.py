@@ -25,12 +25,10 @@ ds = tf.contrib.distributions
 import functools
 from six.moves import xrange
 
-flags.DEFINE_integer('batch_size', 32, 'The number of images in each batch.')
+flags.DEFINE_integer('batch_size', 128, 'The number of images in each batch.')
 flags.DEFINE_string('train_log_dir', 'logs', 'Directory where to write event logs.')
 flags.DEFINE_string('output_dir', 'output', 'Directory where to store output images.')
-flags.DEFINE_integer('max_number_of_steps', 1000, 'The maximum number of gradient steps.')
-flags.DEFINE_string('gan_type', 'unconditional', 'Either `unconditional`, `conditional`, or `infogan`.')
-flags.DEFINE_integer('grid_size', 5, 'Grid size for image visualization.')
+flags.DEFINE_integer('num_epochs', 50, 'The number of epochs to train.')
 flags.DEFINE_integer('noise_dims', 64, 'Dimensions of the generator noise vector.')
 flags.DEFINE_integer('latent_dims', 2, 'Number of latent variables.')
 flags.DEFINE_string('training_file', '../data/rectangles_v0.05_s0.5.pickle', 'Pickle file of images to use.')
@@ -41,6 +39,7 @@ FLAGS = flags.FLAGS
 
 # Set up the input.
 rectangles = np.array(pickle.load(open(FLAGS.training_file, 'rb')), dtype=np.float32)
+length_of_data_set = len(rectangles)
 images = rectangles.reshape((-1, 28, 28, 1))
 dataset = tf.data.Dataset.from_tensor_slices(images)
 dataset = dataset.shuffle(20000).repeat().batch(FLAGS.batch_size)
@@ -183,11 +182,12 @@ train_ops = tfgan.gan_train_ops(
 train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
+number_of_steps = int( (FLAGS.num_epochs * length_of_data_set) / FLAGS.batch_size )
 
 with tf.Session() as sess:
     # train the network
     sess.run(tf.global_variables_initializer())
-    for i in range(FLAGS.max_number_of_steps):
+    for i in range(number_of_steps):
         cur_loss, _ = train_step_fn(sess, train_ops, global_step, train_step_kwargs={})
         loss_values.append((i, cur_loss))
         if i % 100 == 0:

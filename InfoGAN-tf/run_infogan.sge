@@ -14,7 +14,7 @@ rm /tmp/* -R -f 2> /dev/null
 
 source activate LearningDimensions
 echo "starting"
-python run_infogan.py
+python run_infogan.py $1
 echo "done with infogan"
 source deactivate LearningDimensions
 
