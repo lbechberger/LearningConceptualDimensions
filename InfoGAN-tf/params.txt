@@ -1,1 +1,13 @@
 default
+10-epochs
+20-epochs
+30-epochs
+40-epochs
+60-epochs
+70-epochs
+80-epochs
+90-epochs
+100-epochs
+125-epochs
+150-epochs
+200-epochs
