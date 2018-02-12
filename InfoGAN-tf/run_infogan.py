@@ -53,12 +53,19 @@ if config.has_section(config_name):
     options['dis_lr'] = config.getfloat(config_name, 'dis_lr')
 
 # Set up the input.
-rectangles = np.array(pickle.load(open(options['training_file'], 'rb')), dtype=np.float32)
+#rectangles = np.array(pickle.load(open(options['training_file'], 'rb')), dtype=np.float32)
+input_data = pickle.load(open(options['training_file'], 'rb'))
+rectangles = np.array(list(map(lambda x: x[0], input_data)), dtype=np.float32)
+labels = np.array(list(map(lambda x: [x[1], x[2]], input_data)), dtype=np.float32)
 length_of_data_set = len(rectangles)
 images = rectangles.reshape((-1, 28, 28, 1))
-dataset = tf.data.Dataset.from_tensor_slices(images)
+dataset = tf.data.Dataset.from_tensor_slices((images, labels))
 dataset = dataset.shuffle(20000).repeat().batch(options['batch_size'])
-batch_images = dataset.make_one_shot_iterator().get_next()
+batch_images = dataset.make_one_shot_iterator().get_next()[0]
+
+print("Starting InfoGAN training. Here are my parameters:")
+print(options)
+print("Length of data set: {0}".format(length_of_data_set))
 
 # architecture of the generator network
 def infogan_generator(inputs):
@@ -73,9 +80,9 @@ def infogan_generator(inputs):
         net = tf.reshape(net, [-1, 7, 7, 128])
         net = layers.conv2d_transpose(net, 64, [4, 4], stride=2)
         net = layers.conv2d_transpose(net, 32, [4, 4], stride=2)
-        # Make sure that generator output is in the same range as `inputs`, i.e. [0, 1].
+        # Make sure that generator output is in the same range as `inputs`, i.e. [-1, 1].
         net = layers.conv2d(
-            net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.sigmoid)
+            net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.tanh)
     
         return net    
 
@@ -198,6 +205,7 @@ train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
 number_of_steps = int( (options['num_epochs'] * length_of_data_set) / options['batch_size'] )
+print("Number of steps: {0}".format(number_of_steps))
 
 with tf.Session() as sess:
     # train the network
@@ -218,13 +226,15 @@ with tf.Session() as sess:
         reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
 
         def float_image_to_uint8(image):
-            image = (image * 255.0)
-            return tf.cast(image, tf.uint8)
+            scaled = (image * 128.0) + 128.0
+            return tf.cast(scaled, tf.uint8)
           
         uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
         
         image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}_continuous{1}.png".format(config_name, i)), 
                                                     tf.image.encode_png(uint8_continuous[0]))
         sess.run(image_write_op)
+    
+    # now evaluate a regression of width and height on the latent space
            
     print("done evaluating")

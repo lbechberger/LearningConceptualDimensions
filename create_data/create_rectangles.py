@@ -9,47 +9,50 @@ Created on Wed Nov 29 11:12:51 2017
 @author: lbechberger
 """
 
-import sys, pickle
+import pickle
 import numpy as np
 import scipy.ndimage.filters as filters
+import argparse
 
 # read command-line arguments
-number_of_examples = int(sys.argv[1])
-output_filename = sys.argv[2]
+parser = argparse.ArgumentParser(description='Rectangle generator')
+parser.add_argument("n", type = int, help = 'number of images to generate')
+parser.add_argument("file_name", help = 'output file name')
+parser.add_argument("--image_size", type = int, default = 28, help = 'size of the images')
+parser.add_argument("--mean", type = float, default = 0.0, help = 'mean of the Gaussian noise')
+parser.add_argument("--variance", type = float, default = 0.05, help = 'variance of the Gaussian noise')
+parser.add_argument("--sigma", type = float, default = 0.5, help = 'variance of the Gaussian filter')
+args = parser.parse_args()
 
-image_size = 28 # should always be an even number
-half_img_size = int(image_size/2)
-mean = 0.0      # mean of the Gaussian noise
-variance = 0.05 # variance of the Gaussian noise
-sigma = 0.5     # variance of the Gaussian filter
+half_img_size = int(args.image_size/2)
 
 dataset = []
-for i in range(number_of_examples):
+for i in range(args.n):
     # initialize the image with zeroes
-    matrix = np.zeros(shape=[image_size, image_size])
+    matrix = np.full(shape=[args.image_size, args.image_size], fill_value=-1.0)
     
     # randomly draw width and height 
     width = np.random.choice(range(1,half_img_size))
     height = np.random.choice(range(1,half_img_size))
     
     # now set all the pixels inside the rectangle to 1
-    start_row = int((image_size - 2 * height) / 2)
-    start_column = int((image_size - 2 * width) / 2)
+    start_row = int((args.image_size - 2 * height) / 2)
+    start_column = int((args.image_size - 2 * width) / 2)
     
     for row in range(2 * height):
         for column in range(2 * width):
             matrix[start_row + row][start_column + column] = 1.0
 
     # add Gaussian blur to make edges a bit less crisp
-    blurred = filters.gaussian_filter(matrix, sigma)
+    blurred = filters.gaussian_filter(matrix, args.sigma)
     
     # let's add some noise to make the images a bit more realistic & to avoid having the same matrix appear over and over again    
-    noise = np.random.normal(mean, variance, [image_size, image_size])
+    noise = np.random.normal(args.mean, args.variance, [args.image_size, args.image_size])
     added = blurred + noise
-    clipped = np.clip(added, 0.0, 1.0)
+    clipped = np.clip(added, -1.0, 1.0)
         
-    dataset.append(clipped)
+    dataset.append((clipped, width, height))
     
 # dump everything into a pickle file
-with open(output_filename, "wb") as f:
+with open(args.file_name, "wb") as f:
     pickle.dump(dataset, f)

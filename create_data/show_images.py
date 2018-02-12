@@ -23,6 +23,6 @@ fig = plt.figure(figsize=(16,10))
     
 for i in range(12):
     ax = fig.add_subplot(rows, columns, i+1)
-    ax.matshow(data_set[i], cmap="Greys")
+    ax.matshow(data_set[i][0], cmap="Greys")
     
 plt.show()
