@@ -267,6 +267,7 @@ with tf.Session() as sess:
         mse_latent_sum += l
         mse_prediction_sum += p
         mse_baseline_sum += b
+    print(config_name)
     print("RMSE baseline: {0}".format(sqrt(mse_baseline_sum / length_of_data_set)))    
     print("RMSE latent:   {0}".format(sqrt(mse_latent_sum / length_of_data_set)))    
     print("RMSE lin_reg:  {0}".format(sqrt(mse_prediction_sum / length_of_data_set)))    
