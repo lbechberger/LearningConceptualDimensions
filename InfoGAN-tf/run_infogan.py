@@ -26,6 +26,8 @@ from six.moves import xrange
 
 from configparser import RawConfigParser
 
+from math import sqrt
+
 options = {}
 options['train_log_dir'] = 'logs'
 options['output_dir'] = 'output'
@@ -236,5 +238,37 @@ with tf.Session() as sess:
         sess.run(image_write_op)
     
     # now evaluate a regression of width and height on the latent space
-           
+    data_iterator = dataset.make_one_shot_iterator().get_next()
+    real_images = data_iterator[0]
+    real_targets = data_iterator[1]
+    with tf.variable_scope('Discriminator', reuse=True):
+        latent_code = (infogan_discriminator(batch_images, None)[1][0]).loc
+    
+    weights = tf.Variable(tf.truncated_normal([options['latent_dims'],options['latent_dims']]))
+    bias = tf.Variable(tf.truncated_normal([options['latent_dims']]))
+    prediction = tf.matmul(latent_code, weights, transpose_b=True) + bias
+    mse_prediction = tf.reduce_sum(tf.square(real_targets - prediction))
+    mse_latent = tf.reduce_sum(tf.square(real_targets - latent_code))
+    mse_baseline = tf.reduce_sum(tf.square(real_targets))
+    global_step = tf.Variable(0)
+    optimizer = tf.train.GradientDescentOptimizer(1e-6).minimize(mse_prediction, var_list=[weights,bias], global_step = global_step)
+    
+    sess.run([global_step.initializer, weights.initializer, bias.initializer])
+    for i in range(number_of_steps):
+        # train the weights in the fully connected layer
+        sess.run([optimizer,mse_prediction])
+    
+    mse_latent_sum = 0.0
+    mse_prediction_sum = 0.0
+    mse_baseline_sum = 0.0
+    num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
+    for step in range(num_eval_steps):
+        l, p, b = sess.run([mse_latent, mse_prediction, mse_baseline])
+        mse_latent_sum += l
+        mse_prediction_sum += p
+        mse_baseline_sum += b
+    print("RMSE baseline: {0}".format(sqrt(mse_baseline_sum / length_of_data_set)))    
+    print("RMSE latent:   {0}".format(sqrt(mse_latent_sum / length_of_data_set)))    
+    print("RMSE lin_reg:  {0}".format(sqrt(mse_prediction_sum / length_of_data_set)))    
+    
     print("done evaluating")
