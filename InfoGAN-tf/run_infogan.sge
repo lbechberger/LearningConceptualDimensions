@@ -6,6 +6,8 @@
 #$ -pe default 2
 #$ -l cuda=1
 #$ -l cuda_cores=384
+#$ -l nv_mem_free=1G
+#$ -l nv_mem_total=1500M
 #$ -o $HOME/store/sge-logs
 #$ -e $HOME/store/sge-logs
 
@@ -13,9 +15,15 @@ export PATH="$HOME/miniconda/bin:$PATH"
 rm /tmp/* -R -f 2> /dev/null
 
 source activate tensorflow-CS
-echo "starting"
-python run_infogan.py $1
-echo "done with infogan"
+
+t=$(( $SGE_TASK_LAST - $SGE_TASK_ID + 2))
+params=$( tail -n $t $1 | head -n $SGE_TASK_STEPSIZE )
+
+for config in $params
+do
+	python run_infogan.py $config
+done
+
 source deactivate tensorflow-CS
 
 rm /tmp/* -R -f 2> /dev/null
