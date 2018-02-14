@@ -84,8 +84,7 @@ def infogan_generator(inputs):
         net = layers.conv2d_transpose(net, 64, [4, 4], stride=2)
         net = layers.conv2d_transpose(net, 32, [4, 4], stride=2)
         # Make sure that generator output is in the same range as `inputs`, i.e. [-1, 1].
-        net = layers.conv2d(
-            net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.tanh)
+        net = layers.conv2d(net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.tanh)
     
         return net    
 
