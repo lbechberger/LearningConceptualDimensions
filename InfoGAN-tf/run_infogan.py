@@ -15,6 +15,7 @@ Created on Thu Jan 25 2018
 import pickle
 import numpy as np
 import os, sys
+import fcntl
 
 import tensorflow as tf
 tfgan = tf.contrib.gan
@@ -248,28 +249,35 @@ with tf.Session() as sess:
     bias = tf.Variable(tf.truncated_normal([options['latent_dims']]))
     prediction = tf.matmul(latent_code, weights, transpose_b=True) + bias
     mse_prediction = tf.reduce_sum(tf.square(real_targets - prediction))
-    mse_latent = tf.reduce_sum(tf.square(real_targets - latent_code))
+    mse_latent = tf.reduce_sum(tf.square(real_targets - (14 * latent_code)))
     mse_baseline = tf.reduce_sum(tf.square(real_targets))
     global_step = tf.Variable(0)
     optimizer = tf.train.GradientDescentOptimizer(1e-6).minimize(mse_prediction, var_list=[weights,bias], global_step = global_step)
     
+    num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
     sess.run([global_step.initializer, weights.initializer, bias.initializer])
-    for i in range(number_of_steps):
-        # train the weights in the fully connected layer
+    for i in range(10 * num_eval_steps):
+        # train the weights in the fully connected layer for 10 epochs
         sess.run([optimizer,mse_prediction])
     
     mse_latent_sum = 0.0
     mse_prediction_sum = 0.0
     mse_baseline_sum = 0.0
-    num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
     for step in range(num_eval_steps):
         l, p, b = sess.run([mse_latent, mse_prediction, mse_baseline])
         mse_latent_sum += l
         mse_prediction_sum += p
         mse_baseline_sum += b
+    rmse_baseline = sqrt(mse_baseline_sum / length_of_data_set)
+    rmse_latent = sqrt(mse_latent_sum / length_of_data_set)
+    rmse_prediction = sqrt(mse_prediction_sum / length_of_data_set)
     print(config_name)
-    print("RMSE baseline: {0}".format(sqrt(mse_baseline_sum / length_of_data_set)))    
-    print("RMSE latent:   {0}".format(sqrt(mse_latent_sum / length_of_data_set)))    
-    print("RMSE lin_reg:  {0}".format(sqrt(mse_prediction_sum / length_of_data_set)))    
+    print("RMSE baseline: {0}".format(rmse_baseline))    
+    print("RMSE latent:   {0}".format(rmse_latent))    
+    print("RMSE lin_reg:  {0}".format(rmse_prediction))  
+    with open("output/rmse.csv", 'a') as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        f.write("{0},{1},{2},{3}\n".format(config_name, rmse_baseline, rmse_latent, rmse_prediction))
+        fcntl.flock(f, fcntl.LOCK_UN)
     
     print("done evaluating")
