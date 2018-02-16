@@ -36,10 +36,11 @@ options['output_dir'] = 'output'
 options['training_file'] = '../data/rectangles_v0.05_s0.5.pickle'
 options['noise_dims'] = 62
 options['latent_dims'] = 2
+options['batch_size'] = 128
 options['gen_lr'] = 1e-3
 options['dis_lr'] = 2e-4
+options['lambda'] = 1.0
 options['epochs'] = '50'
-options['batch_size'] = 128
 
 config_name = sys.argv[1]
 config = RawConfigParser(options)
@@ -59,10 +60,11 @@ if config.has_section(config_name):
     options['training_file'] = config.get(config_name, 'training_file')
     options['noise_dims'] = config.getint(config_name, 'noise_dims')
     options['latent_dims'] = config.getint(config_name, 'latent_dims')
+    options['batch_size'] = config.getint(config_name, 'batch_size')
     options['gen_lr'] = config.getfloat(config_name, 'gen_lr')
     options['dis_lr'] = config.getfloat(config_name, 'dis_lr')
-    options['batch_size'] = config.getint(config_name, 'batch_size')
-    options['epochs'] = config.get(config_name, 'num_epochs')
+    options['lambda'] = config.getfloat(config_name, 'lambda')
+    options['epochs'] = config.get(config_name, 'epochs')
 
 parse_range('epochs')  
   
@@ -202,7 +204,7 @@ gan_model = tfgan.infogan_model(
     structured_generator_inputs=structured_inputs)
 
 # Build the GAN loss.
-gan_loss = tfgan.gan_loss(gan_model, gradient_penalty_weight=1.0, mutual_information_penalty_weight=1.0, add_summaries=True)
+gan_loss = tfgan.gan_loss(gan_model, gradient_penalty_weight=1.0, mutual_information_penalty_weight=options['lambda'], add_summaries=True)
 
 # Create the train ops, which calculate gradients and apply updates to weights.
 train_ops = tfgan.gan_train_ops(
