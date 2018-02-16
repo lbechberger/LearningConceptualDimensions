@@ -16,6 +16,7 @@ import pickle
 import numpy as np
 import os, sys
 import fcntl
+import ast
 
 import tensorflow as tf
 tfgan = tf.contrib.gan
@@ -33,28 +34,38 @@ options = {}
 options['train_log_dir'] = 'logs'
 options['output_dir'] = 'output'
 options['training_file'] = '../data/rectangles_v0.05_s0.5.pickle'
-options['batch_size'] = 128
-options['num_epochs'] = 50
 options['noise_dims'] = 62
 options['latent_dims'] = 2
 options['gen_lr'] = 1e-3
 options['dis_lr'] = 2e-4
+options['epochs'] = '50'
+options['batch_size'] = 128
 
 config_name = sys.argv[1]
 config = RawConfigParser(options)
-config.read("infogan.cfg")
+config.read("grid_search.cfg")
+
+def parse_range(key):
+    value = options[key]
+    parsed_value = ast.literal_eval(value)
+    if isinstance(parsed_value, list):
+        options[key] = parsed_value
+    else:
+        options[key] = [parsed_value]
 
 if config.has_section(config_name):
     options['train_log_dir'] = config.get(config_name, 'train_log_dir')
     options['output_dir'] = config.get(config_name, 'output_dir')
     options['training_file'] = config.get(config_name, 'training_file')
-    options['batch_size'] = config.getint(config_name, 'batch_size')
-    options['num_epochs'] = config.getint(config_name, 'num_epochs')
     options['noise_dims'] = config.getint(config_name, 'noise_dims')
     options['latent_dims'] = config.getint(config_name, 'latent_dims')
     options['gen_lr'] = config.getfloat(config_name, 'gen_lr')
     options['dis_lr'] = config.getfloat(config_name, 'dis_lr')
+    options['batch_size'] = config.getint(config_name, 'batch_size')
+    options['epochs'] = config.get(config_name, 'num_epochs')
 
+parse_range('epochs')  
+  
 # Set up the input.
 #rectangles = np.array(pickle.load(open(options['training_file'], 'rb')), dtype=np.float32)
 input_data = pickle.load(open(options['training_file'], 'rb'))
@@ -206,79 +217,89 @@ train_ops = tfgan.gan_train_ops(
 train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
-number_of_steps = int( (options['num_epochs'] * length_of_data_set) / options['batch_size'] )
-print("Number of steps: {0}".format(number_of_steps))
+
+# define the subsequent regression network
+data_iterator = dataset.make_one_shot_iterator().get_next()
+real_images = data_iterator[0]
+real_targets = data_iterator[1]
+with tf.variable_scope('Discriminator', reuse=True):
+    latent_code = (infogan_discriminator(batch_images, None)[1][0]).loc
+
+weights = tf.Variable(tf.truncated_normal([options['latent_dims'],options['latent_dims']]))
+bias = tf.Variable(tf.truncated_normal([options['latent_dims']]))
+prediction = tf.matmul(latent_code, weights, transpose_b=True) + bias
+mse_prediction = tf.reduce_sum(tf.square(real_targets - prediction))
+mse_latent = tf.reduce_sum(tf.square(real_targets - (14 * latent_code)))
+mse_baseline = tf.reduce_sum(tf.square(real_targets))
+global_step = tf.Variable(0)
+optimizer = tf.train.GradientDescentOptimizer(1e-6).minimize(mse_prediction, var_list=[weights,bias], global_step = global_step)
+
+num_steps = {}
+max_num_steps = 0
+for epoch in options['epochs']:
+    steps = int( (epoch * length_of_data_set) / options['batch_size'] )
+    num_steps[steps] = epoch
+    max_num_steps = max(max_num_steps, steps)
+
+print("Number of training steps: {0}".format(max_num_steps))
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 with tf.Session(config=config) as sess:
     # train the network
     sess.run(tf.global_variables_initializer())
-    for i in range(number_of_steps):
+    for step in range(max_num_steps):
         cur_loss, _ = train_step_fn(sess, train_ops, global_step, train_step_kwargs={})
-        loss_values.append((i, cur_loss))
-        if i % 100 == 0:
+        loss_values.append((step, cur_loss))
+        if step % 100 == 0:
             print('Current loss: %f' % cur_loss)
-    print("done training")
-    
-    # now create some output images
-    CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
-    for i in range(options['latent_dims']):
-        display_noise = get_eval_noise(options['noise_dims'], CONT_SAMPLE_POINTS, options['latent_dims'], i)
-        with tf.variable_scope('Generator', reuse=True):
-            continuous_image = infogan_generator(display_noise)
-        reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
-
-        def float_image_to_uint8(image):
-            scaled = (image * 127.5) + 127.5
-            return tf.cast(scaled, tf.uint8)
-          
-        uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
         
-        image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}_continuous{1}.png".format(config_name, i)), 
-                                                    tf.image.encode_png(uint8_continuous[0]))
-        sess.run(image_write_op)
+        if (step + 1) in num_steps.keys():
+            epoch = num_steps[step + 1]
+            print("finished epoch {0}".format(epoch))
+            
     
-    # now evaluate a regression of width and height on the latent space
-    data_iterator = dataset.make_one_shot_iterator().get_next()
-    real_images = data_iterator[0]
-    real_targets = data_iterator[1]
-    with tf.variable_scope('Discriminator', reuse=True):
-        latent_code = (infogan_discriminator(batch_images, None)[1][0]).loc
-    
-    weights = tf.Variable(tf.truncated_normal([options['latent_dims'],options['latent_dims']]))
-    bias = tf.Variable(tf.truncated_normal([options['latent_dims']]))
-    prediction = tf.matmul(latent_code, weights, transpose_b=True) + bias
-    mse_prediction = tf.reduce_sum(tf.square(real_targets - prediction))
-    mse_latent = tf.reduce_sum(tf.square(real_targets - (14 * latent_code)))
-    mse_baseline = tf.reduce_sum(tf.square(real_targets))
-    global_step = tf.Variable(0)
-    optimizer = tf.train.GradientDescentOptimizer(1e-6).minimize(mse_prediction, var_list=[weights,bias], global_step = global_step)
-    
-    num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
-    sess.run([global_step.initializer, weights.initializer, bias.initializer])
-    for i in range(10 * num_eval_steps):
-        # train the weights in the fully connected layer for 10 epochs
-        sess.run([optimizer,mse_prediction])
-    
-    mse_latent_sum = 0.0
-    mse_prediction_sum = 0.0
-    mse_baseline_sum = 0.0
-    for step in range(num_eval_steps):
-        l, p, b = sess.run([mse_latent, mse_prediction, mse_baseline])
-        mse_latent_sum += l
-        mse_prediction_sum += p
-        mse_baseline_sum += b
-    rmse_baseline = sqrt(mse_baseline_sum / length_of_data_set)
-    rmse_latent = sqrt(mse_latent_sum / length_of_data_set)
-    rmse_prediction = sqrt(mse_prediction_sum / length_of_data_set)
-    print(config_name)
-    print("RMSE baseline: {0}".format(rmse_baseline))    
-    print("RMSE latent:   {0}".format(rmse_latent))    
-    print("RMSE lin_reg:  {0}".format(rmse_prediction))  
-    with open("output/rmse.csv", 'a') as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        f.write("{0},{1},{2},{3}\n".format(config_name, rmse_baseline, rmse_latent, rmse_prediction))
-        fcntl.flock(f, fcntl.LOCK_UN)
-    
-    print("done evaluating")
+            # create some output images for the current epoch
+            CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
+            for i in range(options['latent_dims']):
+                display_noise = get_eval_noise(options['noise_dims'], CONT_SAMPLE_POINTS, options['latent_dims'], i)
+                with tf.variable_scope('Generator', reuse=True):
+                    continuous_image = infogan_generator(display_noise)
+                reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
+        
+                def float_image_to_uint8(image):
+                    scaled = (image * 127.5) + 127.5
+                    return tf.cast(scaled, tf.uint8)
+                  
+                uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
+                
+                image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}_continuous{2}.png".format(config_name, epoch, i)), 
+                                                            tf.image.encode_png(uint8_continuous[0]))
+                sess.run(image_write_op)
+            
+            # now evaluate a regression of width and height on the latent space
+            num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
+            sess.run([global_step.initializer, weights.initializer, bias.initializer])
+            for i in range(10 * num_eval_steps):
+                # train the weights in the fully connected layer for 10 epochs
+                sess.run(optimizer)
+            
+            mse_latent_sum = 0.0
+            mse_prediction_sum = 0.0
+            mse_baseline_sum = 0.0
+            for i in range(num_eval_steps):
+                l, p, b = sess.run([mse_latent, mse_prediction, mse_baseline])
+                mse_latent_sum += l
+                mse_prediction_sum += p
+                mse_baseline_sum += b
+            rmse_baseline = sqrt(mse_baseline_sum / length_of_data_set)
+            rmse_latent = sqrt(mse_latent_sum / length_of_data_set)
+            rmse_prediction = sqrt(mse_prediction_sum / length_of_data_set)
+            print("\n{0}-ep{1}".format(config_name, epoch))
+            print("RMSE baseline: {0}".format(rmse_baseline))    
+            print("RMSE latent:   {0}".format(rmse_latent))    
+            print("RMSE lin_reg:  {0}".format(rmse_prediction))  
+            with open("output/rmse.csv", 'a') as f:
+                fcntl.flock(f, fcntl.LOCK_EX)
+                f.write("{0}-ep{1},{2},{3},{4}\n".format(config_name, epoch, rmse_baseline, rmse_latent, rmse_prediction))
+                fcntl.flock(f, fcntl.LOCK_UN)

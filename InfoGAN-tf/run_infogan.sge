@@ -1,19 +1,18 @@
 #!/bin/bash
 #$ -N infogan
 #$ -l mem=2G
-#$ -l h_rt=1:00:00
+#$ -l h_rt=1:30:00
 #$ -cwd
 #$ -pe default 2
-#$ -l cuda=1
 #$ -l cuda_cores=384
-#$ -l nv_mem_free=1G
-#$ -l nv_mem_total=1500M
+#$ -l nv_mem_free=1200M
 #$ -o $HOME/store/sge-logs
 #$ -e $HOME/store/sge-logs
 
 export PATH="$HOME/miniconda/bin:$PATH"
 rm /tmp/* -R -f 2> /dev/null
 
+date
 source activate tensorflow-CS
 
 t=$(( $SGE_TASK_LAST - $SGE_TASK_ID + 2))
@@ -25,5 +24,7 @@ do
 done
 
 source deactivate tensorflow-CS
+
+date
 
 rm /tmp/* -R -f 2> /dev/null
