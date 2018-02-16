@@ -21,7 +21,7 @@ params=$( tail -n $t $1 | head -n $SGE_TASK_STEPSIZE )
 
 for config in $params
 do
-	python run_infogan.py $config
+	python -u run_infogan.py $config
 done
 
 source deactivate tensorflow-CS
