@@ -35,10 +35,10 @@ options['output_dir'] = 'output'
 options['training_file'] = '../data/rectangles_v0.05_s0.5.pickle'
 options['batch_size'] = 128
 options['num_epochs'] = 50
-options['noise_dims'] = 64
+options['noise_dims'] = 62
 options['latent_dims'] = 2
 options['gen_lr'] = 1e-3
-options['dis_lr'] = 9e-5
+options['dis_lr'] = 2e-4
 
 config_name = sys.argv[1]
 config = RawConfigParser(options)
@@ -88,7 +88,7 @@ def infogan_generator(inputs):
     
         return net    
 
-_leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.01)
+_leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
 
 # architecture of the discriminator network
 def infogan_discriminator(img, unused_conditioning, weight_decay=2.5e-5, continuous_dim=2):
@@ -209,7 +209,9 @@ loss_values = []
 number_of_steps = int( (options['num_epochs'] * length_of_data_set) / options['batch_size'] )
 print("Number of steps: {0}".format(number_of_steps))
 
-with tf.Session() as sess:
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+with tf.Session(config=config) as sess:
     # train the network
     sess.run(tf.global_variables_initializer())
     for i in range(number_of_steps):
@@ -228,7 +230,7 @@ with tf.Session() as sess:
         reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
 
         def float_image_to_uint8(image):
-            scaled = (image * 128.0) + 128.0
+            scaled = (image * 127.5) + 127.5
             return tf.cast(scaled, tf.uint8)
           
         uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
