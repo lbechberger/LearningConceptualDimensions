@@ -220,21 +220,35 @@ train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
 
-# define the subsequent regression network
+# define the subsequent regression network: ... first the data
 data_iterator = dataset.make_one_shot_iterator().get_next()
 real_images = data_iterator[0]
 real_targets = data_iterator[1]
+sizes = tf.reduce_prod(real_targets, axis=1)
+orientations = tf.gather(real_targets, 0, axis=1) / tf.gather(real_targets, 1, axis=1)
+transformed_targets = tf.stack([sizes, orientations], axis=1)
+all_targets = tf.concat([real_targets, transformed_targets], axis=1)
+
+# ... now the prediction
 with tf.variable_scope('Discriminator', reuse=True):
     latent_code = (infogan_discriminator(batch_images, None)[1][0]).loc
+weights = tf.Variable(tf.truncated_normal([options['latent_dims'], 2*options['latent_dims']]))
+bias = tf.Variable(tf.truncated_normal([2*options['latent_dims']]))
+prediction = tf.matmul(latent_code, weights) + bias
 
-weights = tf.Variable(tf.truncated_normal([options['latent_dims'],options['latent_dims']]))
-bias = tf.Variable(tf.truncated_normal([options['latent_dims']]))
-prediction = tf.matmul(latent_code, weights, transpose_b=True) + bias
-mse_prediction = tf.reduce_sum(tf.square(real_targets - prediction))
-mse_latent = tf.reduce_sum(tf.square(real_targets - (14 * latent_code)))
-mse_baseline = tf.reduce_sum(tf.square(real_targets))
+# ... now the MSE
+mse_prediction = tf.reduce_sum(tf.square(all_targets - prediction), axis=0)
+mse_baseline = tf.reduce_sum(tf.square(all_targets - tf.constant([7.0, 7.0, 49.0, 1.0])), axis=0)
+
+# ... and finally the optimizer
 global_step = tf.Variable(0)
-optimizer = tf.train.GradientDescentOptimizer(1e-6).minimize(mse_prediction, var_list=[weights,bias], global_step = global_step)
+def optimize_over(indices):
+    regression_loss = tf.reduce_mean(tf.gather(mse_prediction, indices))
+    baseline_loss = tf.reduce_mean(tf.gather(mse_baseline, indices))
+    optimizer = tf.train.GradientDescentOptimizer(1e-6).minimize(regression_loss, var_list=[weights,bias], global_step = global_step)
+    return baseline_loss, regression_loss, optimizer
+
+regression_combinations = [('wh', [0,1]), ('ws', [0,2]), ('wo', [0,3]), ('hs', [1,2]), ('ho', [1,3]), ('so', [2,3])]
 
 num_steps = {}
 max_num_steps = 0
@@ -279,29 +293,46 @@ with tf.Session(config=config) as sess:
                                                             tf.image.encode_png(uint8_continuous[0]))
                 sess.run(image_write_op)
             
-            # now evaluate a regression of width and height on the latent space
+            # now evaluate all regression combinations
             num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
-            sess.run([global_step.initializer, weights.initializer, bias.initializer])
-            for i in range(10 * num_eval_steps):
-                # train the weights in the fully connected layer for 10 epochs
-                sess.run(optimizer)
+            epoch_name = "\n{0}-ep{1}".format(config_name, epoch)
+            print(epoch_name)
+            rmse_collection = {}
+            for regression_name, regression_indices in regression_combinations:
+                
+                b_loss, r_loss, optimizer = optimize_over(regression_indices)
+                sess.run([global_step.initializer, weights.initializer, bias.initializer])
+                for i in range(10 * num_eval_steps):
+                    # train the weights in the fully connected layer for 10 epochs
+                    sess.run(optimizer)
+                
+                mse_regression_sum = 0.0
+                mse_baseline_sum = 0.0
+                for i in range(num_eval_steps):
+                    b, r = sess.run([b_loss, r_loss])
+                    mse_regression_sum += r
+                    mse_baseline_sum += b
+                rmse_baseline = sqrt(mse_baseline_sum / length_of_data_set)
+                rmse_regression = sqrt(mse_regression_sum / length_of_data_set)
+                print("{0} RMSE (baseline/regression): {1}/{2}".format(regression_name, rmse_baseline, rmse_regression))
+                rmse_collection[regression_name] = (rmse_baseline, rmse_regression)
+
+            file_name = 'output/rmse.csv'
+            if not os.path.exists(file_name):
+                with open(file_name, 'w') as f:
+                    fcntl.flock(f, fcntl.LOCK_EX)
+                    f.write("config")
+                    for regression_name, _ in regression_combinations:
+                        f.write(",{0}-baseline,{0}-regression".format(regression_name))
+                    f.write("\n")
+                    fcntl.flock(f, fcntl.LOCK_UN)
+
             
-            mse_latent_sum = 0.0
-            mse_prediction_sum = 0.0
-            mse_baseline_sum = 0.0
-            for i in range(num_eval_steps):
-                l, p, b = sess.run([mse_latent, mse_prediction, mse_baseline])
-                mse_latent_sum += l
-                mse_prediction_sum += p
-                mse_baseline_sum += b
-            rmse_baseline = sqrt(mse_baseline_sum / length_of_data_set)
-            rmse_latent = sqrt(mse_latent_sum / length_of_data_set)
-            rmse_prediction = sqrt(mse_prediction_sum / length_of_data_set)
-            print("\n{0}-ep{1}".format(config_name, epoch))
-            print("RMSE baseline: {0}".format(rmse_baseline))    
-            print("RMSE latent:   {0}".format(rmse_latent))    
-            print("RMSE lin_reg:  {0}".format(rmse_prediction))  
-            with open("output/rmse.csv", 'a') as f:
+            with open(file_name, 'a') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
-                f.write("{0}-ep{1},{2},{3},{4}\n".format(config_name, epoch, rmse_baseline, rmse_latent, rmse_prediction))
+                f.write(epoch_name)
+                for regression_name, _ in regression_combinations:
+                    rmse_values = rmse_collection[regression_name]
+                    f.write(",{0},{1}".format(rmse_values[0], rmse_values[1]))
+                f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
