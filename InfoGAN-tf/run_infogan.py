@@ -30,6 +30,9 @@ from configparser import RawConfigParser
 
 from math import sqrt
 
+from sklearn import linear_model
+from sklearn.metrics import mean_squared_error
+
 options = {}
 options['train_log_dir'] = 'logs'
 options['output_dir'] = 'output'
@@ -220,7 +223,7 @@ train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
 
-# define the subsequent regression network: ... first the data
+# define the subsequent regression: ... first the data
 data_iterator = dataset.make_one_shot_iterator().get_next()
 real_images = data_iterator[0]
 real_targets = data_iterator[1]
@@ -229,24 +232,10 @@ orientations = tf.gather(real_targets, 0, axis=1) / tf.gather(real_targets, 1, a
 transformed_targets = tf.stack([sizes, orientations], axis=1)
 all_targets = tf.concat([real_targets, transformed_targets], axis=1)
 
-# ... now the prediction
+# ... and now the latent code
 with tf.variable_scope('Discriminator', reuse=True):
-    latent_code = (infogan_discriminator(batch_images, None)[1][0]).loc
-weights = tf.Variable(tf.truncated_normal([options['latent_dims'], 2*options['latent_dims']]))
-bias = tf.Variable(tf.truncated_normal([2*options['latent_dims']]))
-prediction = tf.matmul(latent_code, weights) + bias
+    latent_code = (infogan_discriminator(real_images, None)[1][0]).loc
 
-# ... now the MSE
-mse_prediction = tf.reduce_sum(tf.square(all_targets - prediction), axis=0)
-mse_baseline = tf.reduce_sum(tf.square(all_targets - tf.constant([7.0, 7.0, 49.0, 1.0])), axis=0)
-
-# ... and finally the optimizer
-global_step = tf.Variable(0)
-def optimize_over(indices):
-    regression_loss = tf.reduce_mean(tf.gather(mse_prediction, indices))
-    baseline_loss = tf.reduce_mean(tf.gather(mse_baseline, indices))
-    optimizer = tf.train.GradientDescentOptimizer(1e-6).minimize(regression_loss, var_list=[weights,bias], global_step = global_step)
-    return baseline_loss, regression_loss, optimizer
 
 regression_combinations = [('wh', [0,1]), ('ws', [0,2]), ('wo', [0,3]), ('hs', [1,2]), ('ho', [1,3]), ('so', [2,3])]
 
@@ -298,24 +287,33 @@ with tf.Session(config=config) as sess:
             epoch_name = "\n{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
             rmse_collection = {}
+
+            regression_x = []
+            regression_y = []
+            for i in range(num_eval_steps):
+                l, t = sess.run([latent_code, all_targets])
+                regression_x.append(l)
+                regression_y.append(t)
+
+            regression_x = np.concatenate(regression_x, axis=0)
+            regression_y = np.concatenate(regression_y, axis=0)
+            cut = int( 0.75 * len(regression_x))
+            baseline_y = np.array([[7.0, 7.0, 49.0, 1.0]]*len(regression_x[cut:]))
+                
             for regression_name, regression_indices in regression_combinations:
+                regression_targets = np.take(regression_y, regression_indices, axis=1)  
                 
-                b_loss, r_loss, optimizer = optimize_over(regression_indices)
-                sess.run([global_step.initializer, weights.initializer, bias.initializer])
-                for i in range(10 * num_eval_steps):
-                    # train the weights in the fully connected layer for 10 epochs
-                    sess.run(optimizer)
+                regr = linear_model.LinearRegression(n_jobs=-1)
+                regr.fit(regression_x[:cut], regression_targets[:cut])
                 
-                mse_regression_sum = 0.0
-                mse_baseline_sum = 0.0
-                for i in range(num_eval_steps):
-                    b, r = sess.run([b_loss, r_loss])
-                    mse_regression_sum += r
-                    mse_baseline_sum += b
-                rmse_baseline = sqrt(mse_baseline_sum / length_of_data_set)
-                rmse_regression = sqrt(mse_regression_sum / length_of_data_set)
-                print("{0} RMSE (baseline/regression): {1}/{2}".format(regression_name, rmse_baseline, rmse_regression))
+                test_predictions = regr.predict(regression_x[cut:])
+                baseline_predictions =  np.take(baseline_y, regression_indices, axis=1)
+                
+                rmse_regression = sqrt(mean_squared_error(test_predictions, regression_targets[cut:]))
+                rmse_baseline = sqrt(mean_squared_error(baseline_predictions, regression_targets[cut:]))
+
                 rmse_collection[regression_name] = (rmse_baseline, rmse_regression)
+                print("{0} RMSE (baseline/regression): {1}/{2}".format(regression_name, rmse_baseline, rmse_regression))
 
             file_name = 'output/rmse.csv'
             if not os.path.exists(file_name):

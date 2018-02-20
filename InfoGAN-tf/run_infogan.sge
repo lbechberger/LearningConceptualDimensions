@@ -1,9 +1,10 @@
 #!/bin/bash
 #$ -N infogan
-#$ -l mem=2G
+#$ -l mem=4G
 #$ -l h_rt=1:30:00
 #$ -cwd
-#$ -pe default 2
+#$ -pe default 4
+#$ -l cuda=1
 #$ -l cuda_cores=384
 #$ -l nv_mem_free=1200M
 #$ -o $HOME/store/sge-logs
