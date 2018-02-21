@@ -33,6 +33,10 @@ from math import sqrt
 from sklearn import linear_model
 from sklearn.metrics import mean_squared_error
 
+from datetime import datetime
+
+timestamp = str(datetime.now()).replace(' ','-')
+
 options = {}
 options['train_log_dir'] = 'logs'
 options['output_dir'] = 'output'
@@ -278,13 +282,13 @@ with tf.Session(config=config) as sess:
                   
                 uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
                 
-                image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}_continuous{2}.png".format(config_name, epoch, i)), 
+                image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)), 
                                                             tf.image.encode_png(uint8_continuous[0]))
                 sess.run(image_write_op)
             
             # now evaluate all regression combinations
             num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
-            epoch_name = "\n{0}-ep{1}".format(config_name, epoch)
+            epoch_name = "{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
             rmse_collection = {}
 
