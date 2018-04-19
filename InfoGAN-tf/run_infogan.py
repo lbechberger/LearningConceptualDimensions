@@ -239,8 +239,7 @@ all_targets = tf.concat([real_targets, transformed_targets], axis=1)
 with tf.variable_scope('Discriminator', reuse=True):
     latent_code = (infogan_discriminator(real_images, None)[1][0]).loc
 
-
-regression_combinations = [('wh', [0,1]), ('ws', [0,2]), ('wo', [0,3]), ('hs', [1,2]), ('ho', [1,3]), ('so', [2,3])]
+regression_combinations = [('width', 0), ('height', 1), ('size', 2), ('orientation', 3)]
 
 num_steps = {}
 max_num_steps = 0
@@ -290,6 +289,9 @@ with tf.Session(config=config) as sess:
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
             rmse_collection = {}
+            for latent_dim in range(options["latent_dims"]):
+                rmse_collection[latent_dim] = []
+            rmse_collection['baseline'] = []
 
             regression_x = []
             regression_y = []
@@ -302,38 +304,88 @@ with tf.Session(config=config) as sess:
             regression_y = np.concatenate(regression_y, axis=0)
             cut = int( 0.75 * len(regression_x))
             baseline_y = np.array([[0.5, 0.5, 0.5, 1.0]]*len(regression_x[cut:]))
+            
+            for regression_name, regression_index in regression_combinations:
                 
-            for regression_name, regression_indices in regression_combinations:
-                regression_targets = np.take(regression_y, regression_indices, axis=1)  
+                regression_targets = np.take(regression_y, regression_index, axis=1)
                 
-                regr = linear_model.LinearRegression(n_jobs=-1)
-                regr.fit(regression_x[:cut], regression_targets[:cut])
-                
-                test_predictions = regr.predict(regression_x[cut:])
-                baseline_predictions =  np.take(baseline_y, regression_indices, axis=1)
-                
-                rmse_regression = sqrt(mean_squared_error(test_predictions, regression_targets[cut:]))
+                # compute baseline
+                baseline_predictions =  np.take(baseline_y, regression_index, axis=1)
                 rmse_baseline = sqrt(mean_squared_error(baseline_predictions, regression_targets[cut:]))
 
-                rmse_collection[regression_name] = (rmse_baseline, rmse_regression)
-                print("{0} RMSE (baseline/regression): {1}/{2}".format(regression_name, rmse_baseline, rmse_regression))
+                rmse_regressions = []
+                rmse_percentages = []
+                # for each dimensions in the latent code, do a regression
+                for latent_dim in range(options["latent_dims"]):
+                    regression_input = np.take(regression_x, [latent_dim], axis=1)
+                    regr = linear_model.LinearRegression(n_jobs=-1)
+                    regr.fit(regression_input[:cut], regression_targets[:cut])
+                    
+                    test_predictions = regr.predict(regression_input[cut:])
+                    rmse = sqrt(mean_squared_error(test_predictions, regression_targets[cut:]))
+                    rmse_percentage = rmse / rmse_baseline
+                    
+                    rmse_collection[latent_dim].append([regression_name, rmse, rmse_percentage])
+                rmse_collection['baseline'].append([regression_name, rmse_baseline, 1.0])
+            
+            # compute interpretability for each dimension
+            interpretabilities = []
+            dimension_names = []
+            for latent_dim in range(options["latent_dims"]):
+                minimal_percentage = 1000.0
+                dimension_name = ''
+                for regression_name, rmse, percentage in rmse_collection[latent_dim]:
+                    if percentage < minimal_percentage:
+                        minimal_percentage = percentage
+                        dimension_name = regression_name
+                interpretability = 1.0 - minimal_percentage
+                interpretabilities.append(interpretability)
+                dimension_names.append(dimension_name)
+            
+            overall_interpretability = min(interpretabilities)
+            
+            # some console output
+            print("overall interpretability: {0}".format(overall_interpretability))
+            print("dimension-wise interpretability: {0}".format(" - ".join(map(lambda x: str(x), interpretabilities))))
+            
+            print("\nBaseline:")
+            print("---------")
+            for regression_name, rmse, _ in rmse_collection['baseline']:
+                print("{0} - {1}".format(regression_name, rmse))
+            
+            for latent_dim in range(options["latent_dims"]):
+                print("\nDimension {0}: {1}".format(latent_dim, dimension_names[latent_dim]))
+                print("--------------")
+                for regression_name, rmse, percentage in rmse_collection[latent_dim]:
+                    print("{0} - {1} - {2}".format(regression_name, rmse, percentage))
+            
 
-            file_name = 'output/rmse.csv'
+            # create output file if necessary
+            file_name = '{0}/rmse.csv'.format(options["output_dir"])
             if not os.path.exists(file_name):
                 with open(file_name, 'w') as f:
                     fcntl.flock(f, fcntl.LOCK_EX)
-                    f.write("config")
+                    f.write("config;overall")
+                    for latent_dim in range(options["latent_dims"]):
+                        f.write(";inter-{0};name-{0}".format(latent_dim))
+                        for regression_name, _ in regression_combinations:
+                            f.write(";{0}-{1};{0}-{1}-p".format(regression_name, latent_dim))
+                    
                     for regression_name, _ in regression_combinations:
-                        f.write(",{0}-baseline,{0}-regression".format(regression_name))
+                        f.write(";{0}-baseline".format(regression_name))
                     f.write("\n")
                     fcntl.flock(f, fcntl.LOCK_UN)
 
-            
+            # append information to output file
             with open(file_name, 'a') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
-                f.write(epoch_name)
-                for regression_name, _ in regression_combinations:
-                    rmse_values = rmse_collection[regression_name]
-                    f.write(",{0},{1}".format(rmse_values[0], rmse_values[1]))
+                f.write("{0};{1}".format(epoch_name, overall_interpretability))
+                for latent_dim in range(options["latent_dims"]):
+                    f.write(";{0};{1}".format(interpretabilities[latent_dim], dimension_names[latent_dim]))
+                    for regression_name, rmse, percentage in rmse_collection[latent_dim]:
+                        f.write(";{0};{1}".format(rmse, percentage))
+                
+                for regression_name, rmse, _ in rmse_collection['baseline']:
+                    f.write(";{0}".format(rmse))
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
