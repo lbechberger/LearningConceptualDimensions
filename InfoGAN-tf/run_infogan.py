@@ -76,7 +76,6 @@ if config.has_section(config_name):
 parse_range('epochs')  
   
 # Set up the input.
-#rectangles = np.array(pickle.load(open(options['training_file'], 'rb')), dtype=np.float32)
 input_data = pickle.load(open(options['training_file'], 'rb'))
 rectangles = np.array(list(map(lambda x: x[0], input_data)), dtype=np.float32)
 labels = np.array(list(map(lambda x: [x[1], x[2]], input_data)), dtype=np.float32)
@@ -230,7 +229,7 @@ loss_values = []
 # define the subsequent regression: ... first the data
 data_iterator = dataset.make_one_shot_iterator().get_next()
 real_images = data_iterator[0]
-real_targets = data_iterator[1]
+real_targets = data_iterator[1] / 28
 sizes = tf.reduce_prod(real_targets, axis=1)
 orientations = tf.gather(real_targets, 0, axis=1) / tf.gather(real_targets, 1, axis=1)
 transformed_targets = tf.stack([sizes, orientations], axis=1)
@@ -302,7 +301,7 @@ with tf.Session(config=config) as sess:
             regression_x = np.concatenate(regression_x, axis=0)
             regression_y = np.concatenate(regression_y, axis=0)
             cut = int( 0.75 * len(regression_x))
-            baseline_y = np.array([[7.0, 7.0, 49.0, 1.0]]*len(regression_x[cut:]))
+            baseline_y = np.array([[0.5, 0.5, 0.5, 1.0]]*len(regression_x[cut:]))
                 
             for regression_name, regression_indices in regression_combinations:
                 regression_targets = np.take(regression_y, regression_indices, axis=1)  
