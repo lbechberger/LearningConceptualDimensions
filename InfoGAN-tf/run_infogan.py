@@ -354,7 +354,7 @@ with tf.Session(config=config) as sess:
                 print("{0} - {1}".format(regression_name, rmse))
             
             for latent_dim in range(options["latent_dims"]):
-                print("\nDimension {0}: {1}".format(latent_dim, dimension_names[latent_dim]))
+                print("\nDimension {0}: {1} ({2})".format(latent_dim, dimension_names[latent_dim], interpretabilities[latent_dim]))
                 print("--------------")
                 for regression_name, rmse, percentage in rmse_collection[latent_dim]:
                     print("{0} - {1} - {2}".format(regression_name, rmse, percentage))
