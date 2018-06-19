@@ -60,10 +60,8 @@ with open(input_file_name, 'r') as in_file:
             for column in array.T:
 #                print(column)
                 if is_float(column[0]):
-                    print("Float vector: {0}".format(column))
                     averages.append(np.mean(np.array(column, dtype="float32")))
                 else:
-                    print("String vector: {0}".format(column))
                     averages.append(most_common(list(column)))
             
             #averages = np.mean(array, axis=0)
