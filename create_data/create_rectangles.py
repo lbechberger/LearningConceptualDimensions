@@ -27,6 +27,7 @@ args = parser.parse_args()
 half_img_size = int(args.image_size/2)
 
 dataset = []
+
 for i in range(args.n):
     # initialize the image with zeroes
     matrix = np.full(shape=[args.image_size, args.image_size], fill_value=-1.0)
@@ -34,6 +35,8 @@ for i in range(args.n):
     # randomly draw width and height 
     width = np.random.choice(range(1,half_img_size))
     height = np.random.choice(range(1,half_img_size))
+    size = 4 * width * height
+    orientation = width / height
     
     # now set all the pixels inside the rectangle to 1
     start_row = int((args.image_size - 2 * height) / 2)
@@ -51,8 +54,8 @@ for i in range(args.n):
     added = blurred + noise
     clipped = np.clip(added, -1.0, 1.0)
         
-    dataset.append((clipped, width, height))
-    
+    dataset.append((clipped, width, height, size, orientation))
+
 # dump everything into a pickle file
 with open(args.file_name, "wb") as f:
     pickle.dump(dataset, f)
