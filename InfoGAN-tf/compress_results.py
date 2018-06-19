@@ -55,14 +55,11 @@ with open(input_file_name, 'r') as in_file:
         
         for config, lines in data_points.items():
             array = np.array(lines)
-            print(array)
             averages = []
             for column in array.T:
-#                print(column)
                 if is_float(column[0]):
                     averages.append(np.mean(np.array(column, dtype="float32")))
                 else:
                     averages.append(most_common(list(column)))
             
-            #averages = np.mean(array, axis=0)
             out_file.write("{0};{1};{2}\n".format(config, ";".join(map(lambda x: str(x), averages)), len(array)))            
