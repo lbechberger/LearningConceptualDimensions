@@ -306,7 +306,7 @@ with tf.Session(config=config) as sess:
                 try_add('size', line[4], latent)
                 try_add('orientation', line[5], latent)
             
-            output = {}            
+            output = {'n_latent' : options["latent_dims"]}            
             min_error_latent = [1000]*options["latent_dims"]
             best_name_latent = [None]*options["latent_dims"]
             
@@ -315,7 +315,7 @@ with tf.Session(config=config) as sess:
 
                 mappings = []
                 differences = []
-                print(dimension)
+                
                 # for each key (i.e., each value in the original data set)
                 for key in bins[dimension]:
                     # compute the mean and variance of the respective latent code for this interpretable value
@@ -343,13 +343,19 @@ with tf.Session(config=config) as sess:
                         min_error_latent[i] = diff_mean[i]
                         best_name_latent[i] = dimension
             
-            min_error_overall = min(min_error_latent)            
+            max_error_overall = max(min_error_latent)
             
             # dump all of this into a pickle file for later use
             with open(os.path.join(options['output_dir'], "{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
                 pickle.dump(output, f)
-                                  
             
+            # some console output for debug purposes
+            print("Overall error: {0}".format(max_error_overall))            
+            for latent in range(options["latent_dims"]):
+                print("latent_{0}: best interpreted as '{1}' ({2})".format(latent, best_name_latent[latent], min_error_latent[latent]))
+                for dimension in dimension_names:
+                    print("\t {0} - {1} ({2})".format(dimension, output[dimension]['variability'][0], output[dimension]['variability'][1]))                    
+                    
             # create output file if necessary
             file_name = os.path.join(options['output_dir'],'interpretabilities.csv')
             if not os.path.exists(file_name):
@@ -366,7 +372,7 @@ with tf.Session(config=config) as sess:
             # append information to output file
             with open(file_name, 'a') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
-                f.write("{0};{1}".format(epoch_name, min_error_overall))
+                f.write("{0};{1}".format(epoch_name, max_error_overall))
                 for latent_dim in range(options["latent_dims"]):
                     f.write(";{0};{1}".format(min_error_latent[latent_dim], best_name_latent[latent_dim]))
                     for name in dimension_names:
