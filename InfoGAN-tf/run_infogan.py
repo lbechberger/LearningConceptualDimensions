@@ -377,7 +377,7 @@ with tf.Session(config=config) as sess:
                 f.write("{0};{1}".format(epoch_name, max_error_overall))
                 for latent_dim in range(options["latent_dims"]):
                     f.write(";{0};{1}".format(min_error_latent[latent_dim], best_name_latent[latent_dim]))
-                    for name in dimension_names:
+                    for dimension in dimension_names:
                         f.write(";{0}".format(output[dimension]['variability'][0][latent_dim]))
                 
                 f.write("\n")
