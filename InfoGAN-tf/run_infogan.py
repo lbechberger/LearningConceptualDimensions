@@ -72,8 +72,9 @@ parse_range('epochs')
   
 # Set up the input.
 input_data = pickle.load(open(options['training_file'], 'rb'))
-rectangles = np.array(list(map(lambda x: x[0], input_data)), dtype=np.float32)
-labels = np.array(list(map(lambda x: [x[1], x[2], x[3], x[4]], input_data)), dtype=np.float32)
+rectangles = np.array(list(map(lambda x: x[0], input_data['data'])), dtype=np.float32)
+labels = np.array(list(map(lambda x: x[1:], input_data['data'])), dtype=np.float32)
+dimension_names = input_data['dimensions']
 length_of_data_set = len(rectangles)
 images = rectangles.reshape((-1, 28, 28, 1))
 dataset = tf.data.Dataset.from_tensor_slices((images, labels))
@@ -231,7 +232,6 @@ with tf.variable_scope('Discriminator', reuse=True):
     latent_code = (infogan_discriminator(real_images, None)[1][0]).loc
 
 evaluation_output = tf.concat([latent_code, real_targets], axis=1)
-dimension_names = ['width', 'height', 'size', 'orientation']
 
 num_steps = {}
 max_num_steps = 0
@@ -301,12 +301,14 @@ with tf.Session(config=config) as sess:
             
             for line in table:
                 latent = line[:2]
-                try_add('width', line[2], latent)
-                try_add('height', line[3], latent)
-                try_add('size', line[4], latent)
-                try_add('orientation', line[5], latent)
+                for i, dimension in enumerate(dimension_names):
+                    try_add(dimension, line[2+i], latent)
+#                try_add('width', line[2], latent)
+#                try_add('height', line[3], latent)
+#                try_add('size', line[4], latent)
+#                try_add('orientation', line[5], latent)
             
-            output = {'n_latent' : options["latent_dims"]}            
+            output = {'n_latent' : options["latent_dims"], 'dimensions' : dimension_names}            
             min_error_latent = [1000]*options["latent_dims"]
             best_name_latent = [None]*options["latent_dims"]
             
@@ -354,7 +356,7 @@ with tf.Session(config=config) as sess:
             for latent in range(options["latent_dims"]):
                 print("latent_{0}: best interpreted as '{1}' ({2})".format(latent, best_name_latent[latent], min_error_latent[latent]))
                 for dimension in dimension_names:
-                    print("\t {0} - {1} ({2})".format(dimension, output[dimension]['variability'][0], output[dimension]['variability'][1]))                    
+                    print("\t {0} - {1} ({2})".format(dimension, output[dimension]['variability'][0][latent], output[dimension]['variability'][1][latent]))                    
                     
             # create output file if necessary
             file_name = os.path.join(options['output_dir'],'interpretabilities.csv')

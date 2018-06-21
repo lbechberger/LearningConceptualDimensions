@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 pickle_file_name = sys.argv[1]
 
 with open(pickle_file_name, "rb") as f:
-    data_set = pickle.load(f)
+    data_set = pickle.load(f)['data']
 
 random.shuffle(data_set)
 
