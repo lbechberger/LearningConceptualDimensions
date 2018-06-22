@@ -78,7 +78,7 @@ dimension_names = input_data['dimensions']
 length_of_data_set = len(rectangles)
 images = rectangles.reshape((-1, 28, 28, 1))
 dataset = tf.data.Dataset.from_tensor_slices((images, labels))
-dataset = dataset.shuffle(20000).repeat().batch(options['batch_size'])
+dataset = dataset.shuffle(20480).repeat().batch(options['batch_size'])
 batch_images = dataset.make_one_shot_iterator().get_next()[0]
 
 print("Starting InfoGAN training. Here are my parameters:")
@@ -294,26 +294,28 @@ with tf.Session(config=config) as sess:
             for name in dimension_names:
                 bins[name] = {}
                 
-            def try_add(dimension, value, latent):
+            def try_add(dimension, value, latent_code):
                 if not value in bins[dimension]:
                     bins[dimension][value] = []
-                bins[dimension][value].append(latent)
+                bins[dimension][value].append(latent_code)
+
             
             for line in table:
-                latent = line[:2]
+                latent_code = line[:options["latent_dims"]]
                 for i, dimension in enumerate(dimension_names):
-                    try_add(dimension, line[2+i], latent)
-#                try_add('width', line[2], latent)
-#                try_add('height', line[3], latent)
-#                try_add('size', line[4], latent)
-#                try_add('orientation', line[5], latent)
+                    try_add(dimension, line[options["latent_dims"] + i], latent_code)
+
+            # compute correlations
+            correlations = np.corrcoef(table, rowvar=False)
             
             output = {'n_latent' : options["latent_dims"], 'dimensions' : dimension_names}            
-            min_error_latent = [1000]*options["latent_dims"]
-            best_name_latent = [None]*options["latent_dims"]
+            min_avg_variability_latent = [1000]*options["latent_dims"]
+            best_name_latent_variability = [None]*options["latent_dims"]
+            max_correlation_latent = [0.0]*options["latent_dims"]
+            best_name_latent_correlation = [None]*options["latent_dims"]            
             
             # iterate over all original dimensions
-            for dimension in dimension_names:
+            for dim_idx, dimension in enumerate(dimension_names):
 
                 mappings = []
                 differences = []
@@ -336,49 +338,69 @@ with tf.Session(config=config) as sess:
                 # aggregate the differences across all the data points: compute mean and variance
                 diff_mean = np.mean(differences, axis = 0)
                 diff_var = np.var(differences, axis = 0)
+
+                # also take Pearson's correlation coefficient
+                local_correlations = correlations[options["latent_dims"] + dim_idx][:options["latent_dims"]]                
                 
-                output[dimension] = {'bins' : mappings, 'variability' : [diff_mean, diff_var]}
+                output[dimension] = {'bins' : mappings, 'variability' : [diff_mean, diff_var], 'correlations' : local_correlations}
             
-                # check whether we found a better interpretation for a latent variable
-                for i in range(options["latent_dims"]):
-                    if diff_mean[i] < min_error_latent[i]:
-                        min_error_latent[i] = diff_mean[i]
-                        best_name_latent[i] = dimension
+                # check whether we found a better interpretation for a latent variable...
+                for latent_dim in range(options["latent_dims"]):
+                    # ... first based on the differences
+                    if diff_mean[latent_dim] < min_avg_variability_latent[latent_dim]:
+                        min_avg_variability_latent[latent_dim] = diff_mean[latent_dim]
+                        best_name_latent_variability[latent_dim] = dimension
+                    # ... then based on the correlation
+                    if np.abs(local_correlations[latent_dim]) > max_correlation_latent[latent_dim]:
+                        max_correlation_latent[latent_dim] = np.abs(local_correlations[latent_dim])
+                        best_name_latent_correlation[latent_dim] = dimension
             
-            max_error_overall = max(min_error_latent)
+            max_error_variability = max(min_avg_variability_latent)
+            interpretability_correlation = min(max_correlation_latent)
             
             # dump all of this into a pickle file for later use
             with open(os.path.join(options['output_dir'], "{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
                 pickle.dump(output, f)
             
-            # some console output for debug purposes
-            print("Overall error: {0}".format(max_error_overall))            
-            for latent in range(options["latent_dims"]):
-                print("latent_{0}: best interpreted as '{1}' ({2})".format(latent, best_name_latent[latent], min_error_latent[latent]))
+            # some console output for debug purposes:
+            # ... first the variability-based evaluation
+            print("\nOverall variability-based error: {0}".format(max_error_variability))            
+            for latent_dim in range(options["latent_dims"]):
+                print("latent_{0}: best interpreted as '{1}' ({2})".format(latent_dim, best_name_latent_variability[latent_dim], min_avg_variability_latent[latent_dim]))
                 for dimension in dimension_names:
-                    print("\t {0} - {1} ({2})".format(dimension, output[dimension]['variability'][0][latent], output[dimension]['variability'][1][latent]))                    
-                    
+                    print("\t {0}: {1} ({2})".format(dimension, output[dimension]['variability'][0][latent_dim], output[dimension]['variability'][1][latent_dim]))                    
+            
+            # ... then the correlation-based evaluation
+            print("\nOverall correlation-based interpretability: {0}".format(interpretability_correlation))            
+            for latent_dim in range(options["latent_dims"]):
+                print("latent_{0}: best interpreted as '{1}' ({2})".format(latent_dim, best_name_latent_correlation[latent_dim], max_correlation_latent[latent_dim]))
+                for dimension in dimension_names:
+                    print("\t {0}: {1}".format(dimension, output[dimension]['correlations'][latent_dim]))                    
+            
+            
             # create output file if necessary
             file_name = os.path.join(options['output_dir'],'interpretabilities.csv')
             if not os.path.exists(file_name):
                 with open(file_name, 'w') as f:
                     fcntl.flock(f, fcntl.LOCK_EX)
-                    f.write("config;overall")
+                    f.write("config;overall_var;overall_cor")
                     for latent_dim in range(options["latent_dims"]):
-                        f.write(";min-err-{0};name-{0}".format(latent_dim))
-                        for name in dimension_names:
-                            f.write(";err-{0}-{1}".format(name, latent_dim))
+                        f.write(";min-var-{0};name-var-{0}".format(latent_dim))
+                        f.write(";max-cor-{0};name-cor-{0}".format(latent_dim))
+                        for dimension in dimension_names:
+                            f.write(";var-{0}-{1};corr-{0}-{1}".format(dimension, latent_dim))
                     f.write("\n")
                     fcntl.flock(f, fcntl.LOCK_UN)
 
             # append information to output file
             with open(file_name, 'a') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
-                f.write("{0};{1}".format(epoch_name, max_error_overall))
+                f.write("{0};{1};{2}".format(epoch_name, max_error_variability, interpretability_correlation))
                 for latent_dim in range(options["latent_dims"]):
-                    f.write(";{0};{1}".format(min_error_latent[latent_dim], best_name_latent[latent_dim]))
+                    f.write(";{0};{1}".format(min_avg_variability_latent[latent_dim], best_name_latent_variability[latent_dim]))
+                    f.write(";{0};{1}".format(max_correlation_latent[latent_dim], best_name_latent_correlation[latent_dim]))
                     for dimension in dimension_names:
-                        f.write(";{0}".format(output[dimension]['variability'][0][latent_dim]))
+                        f.write(";{0};{1}".format(output[dimension]['variability'][0][latent_dim], output[dimension]['correlations'][latent_dim]))
                 
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
