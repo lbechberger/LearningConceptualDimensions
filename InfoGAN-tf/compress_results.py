@@ -10,6 +10,9 @@ import numpy as np
 
 input_file_name = sys.argv[1]
 output_file_name = sys.argv[2]
+grouping = ''
+if len(sys.argv) > 3:
+    grouping = sys.argv[3]
 
 with open(input_file_name, 'r') as in_file:
     with open(output_file_name, 'w') as out_file:
@@ -51,7 +54,21 @@ with open(input_file_name, 'r') as in_file:
             else:
                 # regular line --> add to dictionary
                 tokens = line.replace(",\n", '').split(";")
-                try_add(tokens[0], list(map(lambda x: try_convert(x), tokens[1:])))
+                
+                # take care of the grouping if necessary
+                if len(grouping) > 0:
+                    # find the position of the given hyperparameter
+                    start_idx = tokens[0].find(grouping)
+                    # find the end of the given hyperparameter
+                    end_idx = tokens[0].find('-', start_idx)
+                    if tokens[0][end_idx + 1].isdigit():
+                        # need special dealing for 'di9e-05'
+                        end_idx = tokens[0].find('-', end_idx + 1)
+                    bin_name = tokens[0][start_idx:end_idx]
+                else:
+                    bin_name = tokens[0]
+                
+                try_add(bin_name, list(map(lambda x: try_convert(x), tokens[1:])))
         
         for config, lines in data_points.items():
             array = np.array(lines)
