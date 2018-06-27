@@ -10,9 +10,12 @@ Created on Tue Jun 26 13:44:29 2018
 import sys
 import csv
 from scipy.stats import shapiro, normaltest, f_oneway, ttest_ind, kruskal, mannwhitneyu
-
+from matplotlib import pyplot as plt
+                
 input_file_name = sys.argv[1]
 hyperparams = ['ba', 'di', 'la', 'no', 'ep']
+hyperparams_mapping = {'ba' : 'batch size', 'di' : 'discriminator learning rate', 'la' : 'lambda', 'no' : 'size of noise input', 'ep' : 'number of epochs'}
+metric_mapping = {'min_range' : 'Minimial range of latent variables', 'overall_cor' : 'Overall correlations of the latent code with interpretable dimensions'}
 ranges = {}
 correlations = {}
 significance_threshold = 0.05
@@ -56,7 +59,7 @@ for metric, dictionary in bins.items():
     for hyperparam, bins in dictionary.items():
         
         all_bins_normal = True
-        all_bins = []
+        all_bins_raw = []
         
         for value, numbers in bins.items():
             shapiro_stat, shapiro_p = shapiro(numbers)
@@ -66,13 +69,17 @@ for metric, dictionary in bins.items():
             print("\tD'Agostino test: p = {0} (stat = {1})\t --> {2}".format(d_agostino_p, d_agostino_stat, (d_agostino_p >= significance_threshold)))
             
             if len(sys.argv) > 2:
-                from matplotlib import pyplot as plt
                 plt.hist(numbers, bins=20)
                 plt.show()
             
             this_bin_normal = (shapiro_p >= significance_threshold) and (d_agostino_p >= significance_threshold)
             all_bins_normal = all_bins_normal and this_bin_normal
-            all_bins.append(numbers)
+            all_bins_raw.append((float(value), numbers))
+        
+        all_bins_sorted = sorted(all_bins_raw, key = lambda y: y[0])
+        all_bins = list(map(lambda x: x[1], all_bins_sorted))
+        bin_names = list(map(lambda x: x[0], all_bins_sorted))      
+        print(bin_names)
         
         if all_bins_normal:
             # do ANOVA
@@ -120,6 +127,13 @@ for metric, dictionary in bins.items():
                         significance = "SIGNIFICANT" if mannwhitneyu_p < bonferroni_threshold else "NOT SIGNIFICANT"
                         print("\tDifference between {0} and {1}: p = {2} (stat: {3})\t{4}".format(first_name, second_name, mannwhitneyu_p, mannwhitneyu_stat, significance))
         print("\n")
+
+        # now also create some box plots
+        fig, ax = plt.subplots()
+        ax.boxplot(all_bins, labels = bin_names)
+        ax.set_title("{0}\nfor different values of {1}".format(metric_mapping[metric], hyperparams_mapping[hyperparam]))
+        plt.savefig("{0}-{1}.png".format(metric, hyperparam))       
+        
     print("\n")
         
 # TODO also look for interaction effects?
