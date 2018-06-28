@@ -37,8 +37,10 @@ for i in range(args.n):
     height = np.random.choice(range(1,half_img_size))
     size_mul = 4 * width * height
     size_add = 2 * (width + height)
+    size_sqrt = np.sqrt(size_mul)
     orientation_div = width / height
     orientation_sub = 2 * (width - height)
+    orientation_log = np.divide(np.log10(orientation_div), np.log10(half_img_size - 1))
     
     # now set all the pixels inside the rectangle to 1
     start_row = int((args.image_size - 2 * height) / 2)
@@ -56,9 +58,9 @@ for i in range(args.n):
     added = blurred + noise
     clipped = np.clip(added, -1.0, 1.0)
         
-    dataset.append((clipped, 2 * width, 2 * height, size_mul, size_add, orientation_div, orientation_sub))
+    dataset.append((clipped, 2 * width, 2 * height, size_mul, size_add, size_sqrt, orientation_div, orientation_sub, orientation_log))
 
-output = {'data' : dataset, 'dimensions': ['width', 'height', 'size_mul', 'size_add', 'orientation_div', 'orientation_sub']}
+output = {'data' : dataset, 'dimensions': ['width', 'height', 'size_mul', 'size_add', 'size_sqrt', 'orientation_div', 'orientation_sub', 'orientation_log']}
 
 # dump everything into a pickle file
 with open(args.file_name, "wb") as f:
