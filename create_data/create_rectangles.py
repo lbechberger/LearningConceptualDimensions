@@ -22,6 +22,7 @@ parser.add_argument("--image_size", type = int, default = 28, help = 'size of th
 parser.add_argument("--mean", type = float, default = 0.0, help = 'mean of the Gaussian noise')
 parser.add_argument("--variance", type = float, default = 0.05, help = 'variance of the Gaussian noise')
 parser.add_argument("--sigma", type = float, default = 0.5, help = 'variance of the Gaussian filter')
+parser.add_argument("--type", default = 'uniform', help = 'type of distribution to use')
 args = parser.parse_args()
 
 half_img_size = int(args.image_size/2)
@@ -33,8 +34,19 @@ for i in range(args.n):
     matrix = np.full(shape=[args.image_size, args.image_size], fill_value=-1.0)
     
     # randomly draw width and height 
-    width = np.random.choice(range(1,half_img_size))
-    height = np.random.choice(range(1,half_img_size))
+    if args.type == 'uniform':
+        width = np.random.choice(range(1,half_img_size))
+        height = np.random.choice(range(1,half_img_size))
+    elif args.type == 'normal':
+        mean = half_img_size / 2
+        std = mean / 3.0
+        width = np.random.normal(loc = mean, scale = std)
+        width = min(max(round(width), 1), half_img_size -1)
+        height = np.random.normal(loc = mean, scale = std)
+        height = min(max(round(height), 1), half_img_size -1)
+    else:
+        raise Exception("Unknown distribution: {0}".format(args.type))
+        
     size_mul = 4 * width * height
     size_add = 2 * (width + height)
     size_sqrt = np.sqrt(size_mul)

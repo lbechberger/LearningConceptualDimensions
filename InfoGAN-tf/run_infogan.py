@@ -67,6 +67,7 @@ if config.has_section(config_name):
     options['dis_lr'] = config.getfloat(config_name, 'dis_lr')
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
+    options['type_latent'] = config.get(config_name, 'type_latent')
 
 parse_range('epochs')  
   
@@ -142,9 +143,14 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
     unstructured_noise = tf.random_normal([batch_size, noise_dims])
 
     # Get continuous noise Tensor.
-    continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]), tf.ones([structured_continuous_dim]))
-    continuous_noise = continuous_dist.sample([batch_size])
-
+    if options['type_latent'] == 'uniform':
+        continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]), tf.ones([structured_continuous_dim]))
+        continuous_noise = continuous_dist.sample([batch_size])
+    elif options['type_latent'] == 'normal':
+        continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean = 0.0, stddev = 0.5)
+    else:
+        raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
+        
     return [unstructured_noise], [continuous_noise]
 
 def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):  
