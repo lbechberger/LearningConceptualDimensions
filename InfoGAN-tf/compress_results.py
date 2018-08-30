@@ -48,7 +48,7 @@ with open(input_file_name, 'r') as in_file:
         
         for line in in_file:
             if (line.startswith("config")):
-                # first line - just copy (and add 'count' column)
+                # first line - just copy (and add 'counter' column)
                 out_line = "{0};{1}\n".format(line.replace("\n", ""), 'counter')
                 out_file.write(out_line)
             else:

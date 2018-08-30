@@ -32,6 +32,7 @@ from datetime import datetime
 
 timestamp = str(datetime.now()).replace(' ','-')
 
+# default values for options
 options = {}
 options['train_log_dir'] = 'logs'
 options['output_dir'] = 'output'
@@ -43,7 +44,9 @@ options['gen_lr'] = 1e-3
 options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
+options['type_latent'] = 'uniform'
 
+# read configuration file
 config_name = sys.argv[1]
 config = RawConfigParser(options)
 config.read("grid_search.cfg")
@@ -56,6 +59,7 @@ def parse_range(key):
     else:
         options[key] = [parsed_value]
 
+# overwrite default values for options
 if config.has_section(config_name):
     options['train_log_dir'] = config.get(config_name, 'train_log_dir')
     options['output_dir'] = config.get(config_name, 'output_dir')
@@ -71,7 +75,7 @@ if config.has_section(config_name):
 
 parse_range('epochs')  
   
-# Set up the input.
+# Set up the input
 input_data = pickle.load(open(options['training_file'], 'rb'))
 rectangles = np.array(list(map(lambda x: x[0], input_data['data'])), dtype=np.float32)
 labels = np.array(list(map(lambda x: x[1:], input_data['data'])), dtype=np.float32)
@@ -204,6 +208,7 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
 discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'])
 unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'], options['noise_dims'])
 
+# Create the overall GAN
 gan_model = tfgan.infogan_model(
     generator_fn=infogan_generator,
     discriminator_fn=discriminator_fn,
@@ -239,6 +244,7 @@ with tf.variable_scope('Discriminator', reuse=True):
 
 evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
+# calculate the number of training steps
 num_steps = {}
 max_num_steps = 0
 for epoch in options['epochs']:
@@ -251,19 +257,20 @@ print("Number of training steps: {0}".format(max_num_steps))
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 with tf.Session(config=config) as sess:
-    # train the network
+    # initialize all variables    
     sess.run(tf.global_variables_initializer())
     for step in range(max_num_steps):
+        # train the network
         cur_loss, _ = train_step_fn(sess, train_ops, global_step, train_step_kwargs={})
         loss_values.append((step, cur_loss))
         if step % 100 == 0:
             print('Current loss: %f' % cur_loss)
         
         if (step + 1) in num_steps.keys():
+            # finished an epoch
             epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
             
-    
             # create some output images for the current epoch
             CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
             for i in range(options['latent_dims']):
@@ -288,13 +295,14 @@ with tf.Session(config=config) as sess:
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
 
-            # compute all the outputs
+            # compute all the outputs (= [latent_code, real_targets])
             table = []
             for i in range(num_eval_steps):
                 rows = sess.run(evaluation_output)
                 table.append(rows)
             table = np.concatenate(table, axis=0)
             
+            # compute the ranges for each of the columns
             ranges = np.subtract(np.max(table, axis = 0), np.min(table, axis = 0))[:2]
             min_range = min(ranges)
 
@@ -302,6 +310,8 @@ with tf.Session(config=config) as sess:
             correlations = np.corrcoef(table, rowvar=False)
             
             output = {'n_latent' : options["latent_dims"], 'dimensions' : dimension_names, 'ranges' : ranges, 'table' : table}            
+            
+            # store the so-far best matching interpretable dimension            
             max_correlation_latent = [0.0]*options["latent_dims"]
             best_name_latent_correlation = [None]*options["latent_dims"]    
             
@@ -319,7 +329,9 @@ with tf.Session(config=config) as sess:
                         max_correlation_latent[latent_dim] = np.abs(local_correlations[latent_dim])
                         best_name_latent_correlation[latent_dim] = dimension
             
+            # lower bound for best correlations
             interpretability_correlation = min(max_correlation_latent)
+            # are no two latent variables best interpreted in the same way?
             all_different = (len(set(best_name_latent_correlation)) == options["latent_dims"])         
             
             # dump all of this into a pickle file for later use
