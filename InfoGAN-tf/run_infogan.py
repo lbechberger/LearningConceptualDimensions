@@ -2,9 +2,9 @@
 """
 Training InfoGAN on our rectangle data.
 
-Inspired by and based on 
-    https://github.com/tensorflow/models/blob/master/research/gan/tutorial.ipynb 
-and 
+Inspired by and based on
+    https://github.com/tensorflow/models/blob/master/research/gan/tutorial.ipynb
+and
     https://github.com/tensorflow/models/tree/master/research/gan/mnist
 
 Created on Thu Jan 25 2018
@@ -73,8 +73,8 @@ if config.has_section(config_name):
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
 
-parse_range('epochs')  
-  
+parse_range('epochs')
+
 # Set up the input
 input_data = pickle.load(open(options['training_file'], 'rb'))
 rectangles = np.array(list(map(lambda x: x[0], input_data['data'])), dtype=np.float32)
@@ -105,8 +105,8 @@ def infogan_generator(inputs):
         net = layers.conv2d_transpose(net, 32, [4, 4], stride=2)
         # Make sure that generator output is in the same range as `inputs`, i.e. [-1, 1].
         net = layers.conv2d(net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.tanh)
-    
-        return net    
+
+        return net
 
 _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
 
@@ -154,10 +154,10 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
         continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean = 0.0, stddev = 0.5)
     else:
         raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
-        
+
     return [unstructured_noise], [continuous_noise]
 
-def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):  
+def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
     """Create noise showing impact of first dim continuous noise in InfoGAN.
     First dimension of continuous noise is constant across columns. Other noise is
     constant across rows.
@@ -165,10 +165,10 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
         noise_samples: Number of non-categorical noise samples to use.
         continuous_sample_points: Possible continuous noise points to sample.
         unstructured_noise_dims: Dimensions of the unstructured noise.
-        idx: Index of continuous dimension we want to evaluate. 
+        idx: Index of continuous dimension we want to evaluate.
     Returns:
         Unstructured noise, continuous noise numpy arrays."""
-        
+
     rows, cols = 20, len(continuous_sample_points)
 
     # Take random draws for non-first-dim-continuous noise, making sure they are constant across columns.
@@ -183,10 +183,10 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
         cur_sample = np.random.choice(continuous_sample_points, size=[1, latent_dims-1])
         cont_noise_other_dim.extend([cur_sample] * cols)
     cont_noise_other_dim = np.concatenate(cont_noise_other_dim)
-    
+
     # Increase evaluated dimension of continuous noise from left to right, making sure they are constant across rows.
     cont_noise_evaluated_dim = np.expand_dims(np.tile(continuous_sample_points, rows), 1)
-    
+
     if idx == 0:
         # first dimension is the one to be evaluated
         continuous_noise = np.concatenate((cont_noise_evaluated_dim, cont_noise_other_dim), 1)
@@ -200,7 +200,7 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
         second = np.concatenate(other_dims_list[idx:], 1)
         # sneak cont_noise_evaluated_dim in the middle and glue everything back together
         continuous_noise = np.concatenate((first, cont_noise_evaluated_dim, second), 1)
-    
+
     return unstructured_noise.astype('float32'), continuous_noise.astype('float32')
 
 
@@ -254,10 +254,14 @@ for epoch in options['epochs']:
 
 print("Number of training steps: {0}".format(max_num_steps))
 
+def float_image_to_uint8(image):
+    scaled = (image * 127.5) + 127.5
+    return tf.cast(scaled, tf.uint8)
+
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 with tf.Session(config=config) as sess:
-    # initialize all variables    
+    # initialize all variables
     sess.run(tf.global_variables_initializer())
     for step in range(max_num_steps):
         # train the network
@@ -265,12 +269,20 @@ with tf.Session(config=config) as sess:
         loss_values.append((step, cur_loss))
         if step % 100 == 0:
             print('Current loss: %f' % cur_loss)
-        
+
         if (step + 1) in num_steps.keys():
             # finished an epoch
             epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
-            
+
+            #Save the graph
+            cwd = os.getcwd()
+            checkpoint_dir = os.path.join(cwd+'/graphs')
+            if not os.path.exists(checkpoint_dir):
+                os.makedirs(checkpoint_dir)
+            saver = tf.train.Saver()
+            saver.save(sess,os.path.join(checkpoint_dir, timestamp +'.model'))
+
             # create some output images for the current epoch
             CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
             for i in range(options['latent_dims']):
@@ -278,18 +290,14 @@ with tf.Session(config=config) as sess:
                 with tf.variable_scope('Generator', reuse=True):
                     continuous_image = infogan_generator(display_noise)
                 reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
-        
-                def float_image_to_uint8(image):
-                    scaled = (image * 127.5) + 127.5
-                    return tf.cast(scaled, tf.uint8)
-                  
+
                 uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
-                
-                image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)), 
+
+                image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
                                                             tf.image.encode_png(uint8_continuous[0]))
                 sess.run(image_write_op)
-            
-            
+
+
             # now evaluate the current latent codes
             num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
@@ -301,53 +309,53 @@ with tf.Session(config=config) as sess:
                 rows = sess.run(evaluation_output)
                 table.append(rows)
             table = np.concatenate(table, axis=0)
-            
+
             # compute the ranges for each of the columns
             ranges = np.subtract(np.max(table, axis = 0), np.min(table, axis = 0))[:2]
             min_range = min(ranges)
 
             # compute correlations
             correlations = np.corrcoef(table, rowvar=False)
-            
-            output = {'n_latent' : options["latent_dims"], 'dimensions' : dimension_names, 'ranges' : ranges, 'table' : table}            
-            
-            # store the so-far best matching interpretable dimension            
+
+            output = {'n_latent' : options["latent_dims"], 'dimensions' : dimension_names, 'ranges' : ranges, 'table' : table}
+
+            # store the so-far best matching interpretable dimension
             max_correlation_latent = [0.0]*options["latent_dims"]
-            best_name_latent_correlation = [None]*options["latent_dims"]    
-            
+            best_name_latent_correlation = [None]*options["latent_dims"]
+
             # iterate over all original dimensions
             for dim_idx, dimension in enumerate(dimension_names):
 
                 # take Pearson's correlation coefficient for this dimension
-                local_correlations = correlations[options["latent_dims"] + dim_idx][:options["latent_dims"]]                
-                
+                local_correlations = correlations[options["latent_dims"] + dim_idx][:options["latent_dims"]]
+
                 output[dimension] = local_correlations
-            
+
                 # check whether we found a better interpretation for a latent variable...
                 for latent_dim in range(options["latent_dims"]):
                     if np.abs(local_correlations[latent_dim]) > max_correlation_latent[latent_dim]:
                         max_correlation_latent[latent_dim] = np.abs(local_correlations[latent_dim])
                         best_name_latent_correlation[latent_dim] = dimension
-            
+
             # lower bound for best correlations
             interpretability_correlation = min(max_correlation_latent)
             # are no two latent variables best interpreted in the same way?
-            all_different = (len(set(best_name_latent_correlation)) == options["latent_dims"])         
-            
+            all_different = (len(set(best_name_latent_correlation)) == options["latent_dims"])
+
             # dump all of this into a pickle file for later use
             with open(os.path.join(options['output_dir'], "{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
                 pickle.dump(output, f)
-            
+
             # some console output for debug purposes:
-            print("\nOverall correlation-based interpretability: {0}".format(interpretability_correlation))  
+            print("\nOverall correlation-based interpretability: {0}".format(interpretability_correlation))
             print("Overall minimal range: {0}".format(min_range))
             print("Ended up with all different dimensions: {0}".format(all_different))
             for latent_dim in range(options["latent_dims"]):
                 print("latent_{0} (range {1}): best interpreted as '{2}' ({3})".format(latent_dim, ranges[latent_dim], best_name_latent_correlation[latent_dim], max_correlation_latent[latent_dim]))
                 for dimension in dimension_names:
-                    print("\t {0}: {1}".format(dimension, output[dimension][latent_dim]))                    
-            
-            
+                    print("\t {0}: {1}".format(dimension, output[dimension][latent_dim]))
+
+
             # create output file if necessary
             file_name = os.path.join(options['output_dir'],'interpretabilities.csv')
             if not os.path.exists(file_name):
@@ -371,6 +379,6 @@ with tf.Session(config=config) as sess:
                     f.write(";{0};{1}".format(max_correlation_latent[latent_dim], best_name_latent_correlation[latent_dim]))
                     for dimension in dimension_names:
                         f.write(";{0}".format(output[dimension][latent_dim]))
-                
+
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
