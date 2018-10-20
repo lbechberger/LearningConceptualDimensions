@@ -37,7 +37,7 @@ python create_data/create_rectangles.py 10000 --type normal data/normal.pickle
 The script `show_images.py` takes as argument the file name of the data set to visualize. It randomly selects twelve images from this data set and visualizes them to the user. This script can be used to double-check that reasonable images are generated.
 
 You can use it like this from the project's root directory:
-```python create_data/show_iamges.py data/uniform.pickle```
+```python create_data/show_images.py data/uniform.pickle```
 
 ## vanilla_InfoGAN
 The original InfoGAN implementation ([see here](https://github.com/openai/infogan)) uses an outdated version of tensorflow. In order to get everything set up, please follow the instructions from [here](https://github.com/felixblind/InfoGAN-for-Shapes/). Our code in the vanilla_InfoGAN folder is based on the code from the latter repository, which in turn modified the original repository.
