@@ -7,8 +7,8 @@
 #$ -l cuda=1
 #$ -l cuda_cores=384
 #$ -l nv_mem_free=1200M
-#$ -o /dev/null
-#$ -e /dev/null
+#$ -o $HOME
+#$ -e $HOME
 
 export PATH="$HOME/store/miniconda/bin:$PATH"
 rm /tmp/* -R -f 2> /dev/null
