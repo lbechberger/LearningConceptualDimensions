@@ -76,7 +76,7 @@ if config.has_section(config_name):
 parse_range('epochs')
 
 # Set up the input
-input_data = pickle.load(open(options['training_file'], 'rb'))
+input_data = pickle.load(open(options['training_file'], 'rb'), encoding='latin1')
 rectangles = np.array(list(map(lambda x: x[0], input_data['data'])), dtype=np.float32)
 labels = np.array(list(map(lambda x: x[1:], input_data['data'])), dtype=np.float32)
 dimension_names = input_data['dimensions']
