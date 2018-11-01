@@ -6,9 +6,10 @@ data/*
 vanilla_InfoGAN/ckt
 vanilla_InfoGAN/logs
 
-# InfoGAN-tf etc.
+# InfoGAN-tf logs etc.
 InfoGAN-tf/logs/*
 InfoGAN-tf/output/*
+InfoGAN-tf/graphs/*
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
