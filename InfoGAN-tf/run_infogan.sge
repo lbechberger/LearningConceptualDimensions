@@ -10,7 +10,7 @@
 #$ -o $HOME
 #$ -e $HOME
 
-export PATH="$HOME/store/miniconda/bin:$PATH"
+export PATH="/net/projects/scratch/winter/valid_until_31_July_2019/lbechberger/miniconda/bin:$PATH"
 rm /tmp/* -R -f 2> /dev/null
 
 date
