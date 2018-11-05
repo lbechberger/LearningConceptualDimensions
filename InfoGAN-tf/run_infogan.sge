@@ -1,6 +1,6 @@
 #!/bin/bash
 #$ -N infogan
-#$ -l mem=4G
+#$ -l mem=12G
 #$ -l h_rt=1:30:00
 #$ -cwd
 #$ -pe default 4
