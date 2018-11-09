@@ -8,7 +8,6 @@ Created on Mon Oct 29
 
 @author: christina
 """
-
     
 import tensorflow as tf
 from configparser import RawConfigParser
@@ -85,7 +84,7 @@ real_targets = data_iterator[1]
 
 
 # ... and now the latent code
-with tf.variable_scope('Discriminator', reuse=True):
+with tf.variable_scope('Discriminator', reuse=tf.AUTO_REUSE):
     latent_code = (infogan_discriminator(real_images, None)[1][0]).loc
 
 evaluation_output = tf.concat([latent_code, real_targets], axis=1)
