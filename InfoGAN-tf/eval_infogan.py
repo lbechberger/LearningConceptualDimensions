@@ -14,7 +14,7 @@ Created on Fri Sep 14 2018
 
 
 import tensorflow as tf
-from run_infogan import get_eval_noise,infogan_generator,float_image_to_uint8,infogan_discriminator
+from helperfunctions import get_eval_noise,infogan_generator,float_image_to_uint8,infogan_discriminator
 import tensorflow as tf
 from configparser import RawConfigParser
 from datetime import datetime
