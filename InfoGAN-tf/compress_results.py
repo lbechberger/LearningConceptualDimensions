@@ -49,11 +49,11 @@ with open(input_file_name, 'r') as in_file:
         for line in in_file:
             if (line.startswith("config")):
                 # first line - just copy (and add 'counter' column)
-                out_line = "{0};{1}\n".format(line.replace("\n", ""), 'counter')
+                out_line = "{0},{1}\n".format(line.replace("\n", ""), 'counter')
                 out_file.write(out_line)
             else:
                 # regular line --> add to dictionary
-                tokens = line.replace(",\n", '').split(";")
+                tokens = line.replace(",\n", '').split(",")
                 
                 # take care of the grouping if necessary
                 if len(grouping) > 0:
@@ -81,4 +81,4 @@ with open(input_file_name, 'r') as in_file:
                 else:
                     averages.append(most_common(list(column)))
             
-            out_file.write("{0};{1};{2}\n".format(config, ";".join(map(lambda x: str(x), averages)), len(array)))            
+            out_file.write("{0},{1},{2}\n".format(config, ",".join(map(lambda x: str(x), averages)), len(array)))            

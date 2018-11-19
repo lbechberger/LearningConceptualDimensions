@@ -168,24 +168,24 @@ with tf.Session(config=config) as sess:
             if not os.path.exists(file_name):
                 with open(file_name, 'w') as f:
                     fcntl.flock(f, fcntl.LOCK_EX)
-                    f.write("config;overall_cor;min_range;different")
+                    f.write("config,data_set,overall_cor,min_range,different")
                     for latent_dim in range(options["latent_dims"]):
-                        f.write(";range-{0}".format(latent_dim))
-                        f.write(";max-cor-{0};name-cor-{0}".format(latent_dim))
+                        f.write(",range-{0}".format(latent_dim))
+                        f.write(",max-cor-{0},name-cor-{0}".format(latent_dim))
                         for dimension in dimension_names:
-                            f.write(";corr-{0}-{1}".format(dimension, latent_dim))
+                            f.write(",corr-{0}-{1}".format(dimension, latent_dim))
                     f.write("\n")
                     fcntl.flock(f, fcntl.LOCK_UN)
 
             # append information to output file
             with open(file_name, 'a') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
-                f.write("{0};{1};{2};{3}".format(epoch_name, interpretability_correlation, min_range, all_different))
+                f.write("{0},{1},{2},{3},{4}".format(epoch_name, "rectangles", interpretability_correlation, min_range, all_different))
                 for latent_dim in range(options["latent_dims"]):
-                    f.write(";{0}".format(ranges[latent_dim]))
-                    f.write(";{0};{1}".format(max_correlation_latent[latent_dim], best_name_latent_correlation[latent_dim]))
+                    f.write(",{0}".format(ranges[latent_dim]))
+                    f.write(",{0},{1}".format(max_correlation_latent[latent_dim], best_name_latent_correlation[latent_dim]))
                     for dimension in dimension_names:
-                        f.write(";{0}".format(output[dimension][latent_dim]))
+                        f.write(",{0}".format(output[dimension][latent_dim]))
 
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
