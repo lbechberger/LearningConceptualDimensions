@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 Training InfoGAN on our rectangle data.
-
 Inspired by and based on
     https://github.com/tensorflow/models/blob/master/research/gan/tutorial.ipynb
 and
     https://github.com/tensorflow/models/tree/master/research/gan/mnist
-
 Created on Thu Jan 25 2018
-
 @author: lbechberger
 """
 
@@ -147,10 +144,10 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
     unstructured_noise = tf.random_normal([batch_size, noise_dims])
 
     # Get continuous noise Tensor.
-    if options['type_latent'] == 'uniform':
+    if options['type_latent'] == 'u':
         continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]), tf.ones([structured_continuous_dim]))
         continuous_noise = continuous_dist.sample([batch_size])
-    elif options['type_latent'] == 'normal':
+    elif options['type_latent'] == 'n':
         continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean = 0.0, stddev = 0.5)
     else:
         raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))

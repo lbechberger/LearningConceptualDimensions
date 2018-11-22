@@ -31,12 +31,10 @@ layers = tf.contrib.layers
 ds = tf.contrib.distributions
 
 import functools
-
 from configparser import RawConfigParser
-
 from datetime import datetime
-
 from helperfunctions import get_eval_noise,infogan_generator,float_image_to_uint8,infogan_discriminator
+from tensorflow.python.tools import inspect_checkpoint as chkp
 
 timestamp = str(datetime.now()).replace(' ','-')
 
@@ -202,9 +200,8 @@ with tf.Session(config=config) as sess:
             checkpoint_dir = os.path.join(cwd+'/graphs')
             if not os.path.exists(checkpoint_dir):
                 os.makedirs(checkpoint_dir)
-            saver = tf.train.Saver([latent_code, real_targets])
-            saver.save(sess,os.path.join(checkpoint_dir, timestamp +'.model'))
-            print(saver)
+#            saver = tf.train.Saver()
+#            saver.save(sess,os.path.join(checkpoint_dir, timestamp +'.model'))
             
             # create some output images for the current epoch
             CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
@@ -220,4 +217,4 @@ with tf.Session(config=config) as sess:
                                                             tf.image.encode_png(uint8_continuous[0]))
                 sess.run(image_write_op)
                 
-                
+            chkp.print_tensors_in_checkpoint_file(checkpoint_dir, all_tensors=True)    
