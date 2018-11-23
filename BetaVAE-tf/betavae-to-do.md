@@ -1,0 +1,3 @@
+- [ ] Complete run_betavae.py
+  - [ ] Change input from MNIST to rectangles
+  - [ ] Have the output be evaluated
