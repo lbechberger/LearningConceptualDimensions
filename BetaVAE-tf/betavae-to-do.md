@@ -1,3 +1,4 @@
 - [ ] Complete run_betavae.py
   - [ ] Change input from MNIST to rectangles
   - [ ] Have the output be evaluated
+- [ ] Change run_betavae.sge such that it can also use the given parameters
