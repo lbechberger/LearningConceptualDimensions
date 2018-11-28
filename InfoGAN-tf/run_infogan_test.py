@@ -7,19 +7,18 @@ Inspired by and based on
 and
     https://github.com/tensorflow/models/tree/master/research/gan/mnist
 
-This script is a copy of run_infogan.py. The difference is that instead of 
-defining the functions get_eval_noise, infogan_generator, float_image_to_uint8 
-and infogan_discriminator, this script imports them from the script 
-helperfunctions.py and it merely trains the GAN, leaving the evaluation to 
-evaluate_infogan.py
+This script is a copy of the training part of run_infogan.py with changes in order to
+save and restore the trained weights and parameters for the model. 
 
 Created on Thu Jan 25 2018,
 
 @author: lbechberger
 
 Edited on Fri Nov  9 by christina
-"""
 
+
+
+"""
 import pickle
 import numpy as np
 import os, sys
@@ -183,6 +182,7 @@ config.gpu_options.allow_growth = True
 with tf.Session(config=config) as sess:
     # initialize all variables
     sess.run(tf.global_variables_initializer())
+    
     for step in range(max_num_steps):
         # train the network
         cur_loss, _ = train_step_fn(sess, train_ops, global_step, train_step_kwargs={})
@@ -196,25 +196,51 @@ with tf.Session(config=config) as sess:
             print("finished epoch {0}".format(epoch))
 
             #Save the graph https://www.tensorflow.org/api_docs/python/tf/train/Saver
-            cwd = os.getcwd()
-            checkpoint_dir = os.path.join(cwd+'/graphs')
+            cwd = os.getcwd()  #returns current working directory of a process
+            checkpoint_dir = os.path.join(cwd+'/graphs') #building a directory called 'graphs' 
+                                                         #for the checkpoint data in the current directory
             if not os.path.exists(checkpoint_dir):
                 os.makedirs(checkpoint_dir)
-#            saver = tf.train.Saver()
-#            saver.save(sess,os.path.join(checkpoint_dir, timestamp +'.model'))
+            model = timestamp + str(epoch) +'.model'
+            checkpoint = os.path.join(checkpoint_dir, model)
+            saver = tf.train.Saver()
+            saver.save(sess, checkpoint)
             
-            # create some output images for the current epoch
-            CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
-            for i in range(options['latent_dims']):
-                display_noise = get_eval_noise(options['noise_dims'], CONT_SAMPLE_POINTS, options['latent_dims'], i)
-                with tf.variable_scope('Generator', reuse=True):
-                    continuous_image = infogan_generator(display_noise)
-                reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
+#retrieve graph            
+with tf.Graph().as_default():
+    assert len(tf.trainable_variables()) == 0
+    reader = tf.train.NewCheckpointReader(checkpoint)
+    restore_dict = dict()
+    for v in tf.trainable_variables():
+        tensor_name = v.name.split(':')[0]
+        if reader.has_tensor(tensor_name):
+            print('has tensor ', tensor_name)
+            restore_dict[tensor_name] = v
 
-                uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
-
-                image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
-                                                            tf.image.encode_png(uint8_continuous[0]))
-                sess.run(image_write_op)
+    saver = tf.train.Saver(restore_dict)
+    with tf.Session() as sess:
+        sess.run(tf.initialize_all_variables())
+        saver.restore(sess, checkpoint)
+        print("Model restored") 
+ 
+# define tf.Variable()s
+       
+# prints [array([ 0.], dtype=float32), array([ 2.], dtype=float32)]    
                 
-            chkp.print_tensors_in_checkpoint_file(checkpoint_dir, all_tensors=True)    
+            # chkp.print_tensors_in_checkpoint_file(checkpoint, [latent_code, real_targets], all_tensors=True, all_tensor_names=True)  
+            
+            # Finds the filename of latest saved checkpoint file.
+#            latest_checkpoint = (tf.train.latest_checkpoint(checkpoint,latest_filename=None))
+#            
+#            #Returns CheckpointReader for checkpoint found in latest_checkpoint.
+#            print('NewCheckpointReader '+(tf.train.NewCheckpointReader(latest_checkpoint)))
+#            
+#            print('CheckpointReader.get_tensor(latent_code) '+(tf.train.CheckpointReader.get_tensor(latent_code)))
+#            
+#            #Returns CheckpointReader for checkpoint found in latest_checkpoint.
+#            print('load_checkpoint '+(tf.train.load_checkpoint(latest_checkpoint)))
+            
+            
+            
+            
+            
