@@ -1,14 +1,11 @@
 # -*- coding: utf-8 -*-
 """
 Training InfoGAN on our rectangle data.
-
 Inspired by and based on
     https://github.com/tensorflow/models/blob/master/research/gan/tutorial.ipynb
 and
     https://github.com/tensorflow/models/tree/master/research/gan/mnist
-
 Created on Thu Jan 25 2018
-
 @author: lbechberger
 """
 
