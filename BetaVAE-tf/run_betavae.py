@@ -7,19 +7,92 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import os
-from tensorflow.examples.tutorials.mnist import input_data
+import pickle
+import numpy as np
+import scipy.ndimage.filters as filters
+import argparse
+# MF: get rid of mnist
+# from tensorflow.examples.tutorials.mnist import input_data
+
+# default values for options
+options = {}
+options['train_log_dir'] = 'logs'
+options['output_dir'] = 'output'
+options['training_file'] = '../data/uniform.pickle'
+options['noise_dims'] = 62
+options['latent_dims'] = 2
+options['batch_size'] = 128
+options['gen_lr'] = 1e-3
+options['dis_lr'] = 2e-4
+options['lambda'] = 1.0
+options['epochs'] = '50'
+options['type_latent'] = 'uniform'
+
+# Set up the input
+input_data = pickle.load(open(options['training_file'], 'rb'), encoding='latin1')
+rectangles = np.array(list(map(lambda x: x[0], input_data['data'])), dtype=np.float32)
+labels = np.array(list(map(lambda x: x[1:], input_data['data'])), dtype=np.float32)
+dimension_names = input_data['dimensions']
+length_of_data_set = len(rectangles)
+print('DONE')
+print(rectangles.shape)
+print('DONE')
+# images = rectangles.reshape((-1, 28, 28, 1))
+images = rectangles.reshape((-1, 784))
+dataset = (images, labels)
 
 
-mnist = input_data.read_data_sets('../../MNIST_data', one_hot=True)
-print(mnist)
-mb_size = 64
+"""
+def next_batch(num, data, labels):
+    '''
+    Return a total of `num` random samples and labels. 
+    '''
+    idx = np.arange(0 , len(data))
+    np.random.shuffle(idx)
+    idx = idx[:num]
+    data_shuffle = [data[ i] for i in idx]
+    labels_shuffle = [labels[ i] for i in idx]
+
+    return np.asarray(data_shuffle), np.asarray(labels_shuffle)
+    
+"""    
+""" 
+dataset = tf.data.Dataset.from_tensor_slices((images, labels))
+dataset = dataset.shuffle(20480).repeat().batch(options['batch_size'])
+batch_images = dataset.make_one_shot_iterator().get_next()[0]
+"""
+
+print("Starting betaVAE training. Here are my parameters:")
+print(options)
+print("Length of data set: {0}".format(length_of_data_set))
+
+mnist = dataset
+"""
+# MF: mnist = input_data.read_data_sets('../../MNIST_data', one_hot=True)
+
+# MF
+print(mnist.shape[1] * mnist.shape[2])
+"""
+# MF
+print('DONE')
+print('DONE')
+# MF
+mb_size = 10
 z_dim = 100
-X_dim = mnist.train.images.shape[1]
-y_dim = mnist.train.labels.shape[1]
+# MF: Must be 784
+X_dim = mnist[0].shape[1] 
+# y_dim = mnist.train.labels.shape[1]
 h_dim = 128
 c = 0
 lr = 1e-3
 beta = 1
+
+# MF: Needs to be exchanged with a real get_batch function. batch-size should depend on mb_size
+def get_batch(data, i):
+    step = mb_size * i
+    # MF
+    return data[0][step:64 + step]
+
 
 def plot(samples):
     fig = plt.figure(figsize=(4, 4))
@@ -113,7 +186,9 @@ if not os.path.exists('out/'):
 i = 0
 
 for it in range(1000000):
-    X_mb, _ = mnist.train.next_batch(mb_size)
+    # X_mb, _ = mnist.train.next_batch(mb_size)
+    X_mb = get_batch(mnist, it)
+    #print(X_mb)
 
     _, loss = sess.run([solver, vae_loss], feed_dict={X: X_mb})
 
