@@ -209,19 +209,13 @@ with tf.Session(config=config) as sess:
 #retrieve graph            
 with tf.Graph().as_default():
     assert len(tf.trainable_variables()) == 0
-    reader = tf.train.NewCheckpointReader(checkpoint)
-    restore_dict = dict()
-    for v in tf.trainable_variables():
-        tensor_name = v.name.split(':')[0]
-        if reader.has_tensor(tensor_name):
-            print('has tensor ', tensor_name)
-            restore_dict[tensor_name] = v
 
-    saver = tf.train.Saver(restore_dict)
     with tf.Session() as sess:
         sess.run(tf.initialize_all_variables())
+        saver = tf.train.import_meta_graph(checkpoint + '.meta')
         saver.restore(sess, checkpoint)
         print("Model restored") 
+        print(tf.trainable_variables())
  
 # define tf.Variable()s
        
