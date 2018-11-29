@@ -11,8 +11,8 @@ import pickle
 import numpy as np
 import scipy.ndimage.filters as filters
 import argparse
-# MF: get rid of mnist
-# from tensorflow.examples.tutorials.mnist import input_data
+# Should be removed later on
+from tensorflow.examples.tutorials.mnist import input_data as inp_data
 
 # default values for options
 options = {}
@@ -31,67 +31,36 @@ options['type_latent'] = 'uniform'
 # Set up the input
 input_data = pickle.load(open(options['training_file'], 'rb'), encoding='latin1')
 rectangles = np.array(list(map(lambda x: x[0], input_data['data'])), dtype=np.float32)
-labels = np.array(list(map(lambda x: x[1:], input_data['data'])), dtype=np.float32)
 dimension_names = input_data['dimensions']
 length_of_data_set = len(rectangles)
-print('DONE')
-print(rectangles.shape)
-print('DONE')
 # images = rectangles.reshape((-1, 28, 28, 1))
 images = rectangles.reshape((-1, 784))
-dataset = (images, labels)
 
-
-"""
-def next_batch(num, data, labels):
-    '''
-    Return a total of `num` random samples and labels. 
-    '''
-    idx = np.arange(0 , len(data))
-    np.random.shuffle(idx)
-    idx = idx[:num]
-    data_shuffle = [data[ i] for i in idx]
-    labels_shuffle = [labels[ i] for i in idx]
-
-    return np.asarray(data_shuffle), np.asarray(labels_shuffle)
-    
-"""    
+# Uncomment if you want to use mnist instead of the rectangle data set
 """ 
-dataset = tf.data.Dataset.from_tensor_slices((images, labels))
-dataset = dataset.shuffle(20480).repeat().batch(options['batch_size'])
-batch_images = dataset.make_one_shot_iterator().get_next()[0]
+mnist = inp_data.read_data_sets('../../MNIST_data', one_hot=True)
+images = mnist.train.images
 """
 
-print("Starting betaVAE training. Here are my parameters:")
-print(options)
-print("Length of data set: {0}".format(length_of_data_set))
-
-mnist = dataset
-"""
-# MF: mnist = input_data.read_data_sets('../../MNIST_data', one_hot=True)
-
-# MF
-print(mnist.shape[1] * mnist.shape[2])
-"""
-# MF
-print('DONE')
-print('DONE')
-# MF
-mb_size = 10
+mb_size = 64
 z_dim = 100
-# MF: Must be 784
-X_dim = mnist[0].shape[1] 
-# y_dim = mnist.train.labels.shape[1]
+X_dim = images.shape[1] 
 h_dim = 128
 c = 0
 lr = 1e-3
 beta = 1
 
-# MF: Needs to be exchanged with a real get_batch function. batch-size should depend on mb_size
-def get_batch(data, i):
-    step = mb_size * i
-    # MF
-    return data[0][step:64 + step]
+def get_batch(data):
+    '''
+    Return a total of `num` random samples and labels. Code taken from:
+    https://stackoverflow.com/questions/40994583/how-to-implement-tensorflows-next-batch-for-own-data 
+    '''
+    idx = np.arange(0 , len(data))
+    np.random.shuffle(idx)
+    idx = idx[:mb_size]
+    data_shuffle = [data[i] for i in idx]
+    
+    return data_shuffle
 
 
 def plot(samples):
@@ -187,7 +156,7 @@ i = 0
 
 for it in range(1000000):
     # X_mb, _ = mnist.train.next_batch(mb_size)
-    X_mb = get_batch(mnist, it)
+    X_mb = get_batch(images)
     #print(X_mb)
 
     _, loss = sess.run([solver, vae_loss], feed_dict={X: X_mb})
