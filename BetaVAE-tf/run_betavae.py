@@ -42,10 +42,6 @@ mnist = inp_data.read_data_sets('../../MNIST_data', one_hot=True)
 images = mnist.train.images
 """
 
-<<<<<<< HEAD
-=======
-mnist = input_data.read_data_sets('../../MNIST_data', one_hot=True)
->>>>>>> 9426e693f3b623695bed4440df6905f1ba58ff8e
 mb_size = 64
 z_dim = 100
 X_dim = images.shape[1] 
