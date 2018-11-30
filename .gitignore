@@ -11,6 +11,9 @@ InfoGAN-tf/logs/*
 InfoGAN-tf/output/*
 InfoGAN-tf/graphs/*
 
+# beta-VAE logs etc.
+BetaVAE-tf/out/*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
