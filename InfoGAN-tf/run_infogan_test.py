@@ -33,9 +33,19 @@ import functools
 from configparser import RawConfigParser
 from datetime import datetime
 from helperfunctions import get_eval_noise,infogan_generator,float_image_to_uint8,infogan_discriminator
-from tensorflow.python.tools import inspect_checkpoint as chkp
+
 
 timestamp = str(datetime.now()).replace(' ','-')
+checkpointsaver = [] 
+# prevent that only the latest checkpoint is saved in the txt file by saving the previous content and 
+# including it together with the new checkpoints in the end
+# comment out the following 5 lines if you do not want to save the old checkpoints
+
+if os.path.exists('checkpoints.txt'):
+    f = open("checkpoints.txt", "r")
+    for line in f:
+        checkpointsaver.append(line)
+    f.close()
 
 # default values for options
 options = {}
@@ -201,40 +211,16 @@ with tf.Session(config=config) as sess:
                                                          #for the checkpoint data in the current directory
             if not os.path.exists(checkpoint_dir):
                 os.makedirs(checkpoint_dir)
-            model = timestamp + str(epoch) +'.model'
+            model = timestamp + str(epoch) + config_name +'.model'
             checkpoint = os.path.join(checkpoint_dir, model)
             saver = tf.train.Saver()
             saver.save(sess, checkpoint)
-            
-#retrieve graph            
-with tf.Graph().as_default():
-    assert len(tf.trainable_variables()) == 0
+            checkpointsaver.append(model+ " " + config_name)
+print(checkpointsaver) # save all checkpointfile/model names in a txt file to find them later for evaluation
 
-    with tf.Session() as sess:
-        sess.run(tf.initialize_all_variables())
-        saver = tf.train.import_meta_graph(checkpoint + '.meta')
-        saver.restore(sess, checkpoint)
-        print("Model restored") 
-        print(tf.trainable_variables())
- 
-# define tf.Variable()s
-       
-# prints [array([ 0.], dtype=float32), array([ 2.], dtype=float32)]    
-                
-            # chkp.print_tensors_in_checkpoint_file(checkpoint, [latent_code, real_targets], all_tensors=True, all_tensor_names=True)  
-            
-            # Finds the filename of latest saved checkpoint file.
-#            latest_checkpoint = (tf.train.latest_checkpoint(checkpoint,latest_filename=None))
-#            
-#            #Returns CheckpointReader for checkpoint found in latest_checkpoint.
-#            print('NewCheckpointReader '+(tf.train.NewCheckpointReader(latest_checkpoint)))
-#            
-#            print('CheckpointReader.get_tensor(latent_code) '+(tf.train.CheckpointReader.get_tensor(latent_code)))
-#            
-#            #Returns CheckpointReader for checkpoint found in latest_checkpoint.
-#            print('load_checkpoint '+(tf.train.load_checkpoint(latest_checkpoint)))
-            
-            
-            
-            
-            
+f = open("checkpoints.txt", "w")
+strukturierter_text = "\n".join(checkpointsaver)
+for modelname in checkpointsaver:
+    f.write(strukturierter_text)
+f.close()
+
