@@ -165,16 +165,6 @@ train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
 
-# define the subsequent evaluation: ... first the data
-data_iterator = dataset.make_one_shot_iterator().get_next()
-real_images = data_iterator[0]
-real_targets = data_iterator[1]
-
-# ... and now the latent code
-with tf.variable_scope('Discriminator', reuse=True):
-    latent_code = (infogan_discriminator(real_images, None)[1][0]).loc
-
-evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
 # calculate the number of training steps
 num_steps = {}
