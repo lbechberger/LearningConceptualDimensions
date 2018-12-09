@@ -170,5 +170,6 @@ for it in range(1000000):
 
         fig = plot(samples)
         plt.savefig('out/{}.png'.format(str(i).zfill(3)), bbox_inches='tight')
+        plt.close(fig)
         i += 1
 plt.close(fig)
