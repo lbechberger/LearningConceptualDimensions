@@ -37,6 +37,8 @@ options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
 options['type_latent'] = 'uniform'
+options['weight_decay_gen'] = 2.5e-5
+options['weight_decay_dis'] = 2.5e-5
 
 # read configuration file
 config_name = sys.argv[1]
@@ -65,6 +67,8 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
+    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
+    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
 
 parse_range('epochs')
 

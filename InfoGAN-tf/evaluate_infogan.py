@@ -13,13 +13,14 @@ import pickle
 import numpy as np
 import os, sys
 import ast
+import fcntl
 import tensorflow as tf
 from datetime import datetime
 from configparser import RawConfigParser
-from helperfunctions import get_eval_noise, infogan_generator, float_image_to_uint8, infogan_discriminator
+from helperfunctions import get_eval_noise, float_image_to_uint8, infogan_discriminator
 
 timestamp = str(datetime.now()).replace(' ','-')
-
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 # default values for options
 options = {}
 options['train_log_dir'] = 'logs'
@@ -33,6 +34,8 @@ options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
 options['type_latent'] = 'uniform'
+options['weight_decay_gen'] = 2.5e-5
+options['weight_decay_dis'] = 2.5e-5
 
 # read configuration file
 model_name = sys.argv[1] #takes name of the modeltitle as an argument, e.g. '2018-12-05-12:12:49.8405241dummy.model'
@@ -61,6 +64,8 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
+    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
+    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
 
 parse_range('epochs')
 
@@ -85,7 +90,7 @@ real_targets = data_iterator[1]
 
 # ... and now the latent code
 with tf.variable_scope('Discriminator', reuse=tf.AUTO_REUSE):
-    latent_code = (infogan_discriminator(real_images, None)[1][0]).loc
+    latent_code = (infogan_discriminator(real_images, None, weight_decay_dis=options['weight_decay_dis'])[1][0]).loc
 
 evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
@@ -111,7 +116,7 @@ with tf.Session() as sess:
 
     # now evaluate the current latent codes
     num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
-    epoch_name = "{0}-ep{1}".format(config_name, epoch)
+    epoch_name = "{0}-{1}-ep{2}".format(model_name, config_name, epoch)
     print(epoch_name)
 
     # compute all the outputs (= [latent_code, real_targets])
@@ -195,6 +200,7 @@ with tf.Session() as sess:
         fcntl.flock(f, fcntl.LOCK_UN)
 
 
+
 # if model_name == 'evaluate' && config_name == 'all':
 #     f = open("checkpoints.txt", "r")
 #     model = []
@@ -208,5 +214,3 @@ with tf.Session() as sess:
 #             model_name = checkpointfile[1]
 #             print("Evaluation for: " + model_name + " " + config_name)
 #             full_evaluation(model_name, config_name)
-            
-    
