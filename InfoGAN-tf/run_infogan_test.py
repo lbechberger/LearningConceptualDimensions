@@ -59,7 +59,7 @@ options['gen_lr'] = 1e-3
 options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
-options['type_latent'] = 'uniform'
+options['type_latent'] = 'u'
 options['weight_decay_gen'] = 2.5e-5
 options['weight_decay_dis'] = 2.5e-5
 
