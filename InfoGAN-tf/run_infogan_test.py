@@ -229,9 +229,8 @@ with tf.Session(config=config) as sess:
 print(checkpointsaver) # save all checkpointfile/model names in a txt file to find them later for evaluation
 
 f = open("checkpoints.txt", "w")
-strukturierter_text = "\n".join(checkpointsaver)
 for modelname in checkpointsaver:
-    f.write(strukturierter_text)
+    f.write(modelname + '\n')
 f.close()
 
-print (tf.trainable_variables())
+#print (tf.trainable_variables())

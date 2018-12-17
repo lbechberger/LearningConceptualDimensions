@@ -103,7 +103,6 @@ for epoch in options['epochs']:
     max_num_steps = max(max_num_steps, steps)
 
 
-
 #retrieve graph            
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
@@ -111,6 +110,7 @@ with tf.Session() as sess:
     saver.restore(sess, 'graphs/'+ model_name)
     print("Model restored")
     print(tf.trainable_variables())
+    # print(sess.run(tf.trainable_variables()[10]))
 
     ###start evaluation###
 
