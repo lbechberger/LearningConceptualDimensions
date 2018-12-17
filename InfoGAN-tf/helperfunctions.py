@@ -71,35 +71,15 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
 
     return unstructured_noise.astype('float32'), continuous_noise.astype('float32')
 
-
-# architecture of the generator network
-def infogan_generator(inputs):
-    with tf.contrib.framework.arg_scope(
-      [layers.fully_connected, layers.conv2d_transpose],
-      activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
-      weights_regularizer=layers.l2_regularizer(2.5e-5)):
-        unstructured_noise, cont_noise = inputs
-        noise = tf.concat([unstructured_noise, cont_noise], axis=1)
-        net = layers.fully_connected(noise, 1024)
-        net = layers.fully_connected(net, 7 * 7 * 128)
-        net = tf.reshape(net, [-1, 7, 7, 128])
-        net = layers.conv2d_transpose(net, 64, [4, 4], stride=2)
-        net = layers.conv2d_transpose(net, 32, [4, 4], stride=2)
-        # Make sure that generator output is in the same range as `inputs`, i.e. [-1, 1].
-        net = layers.conv2d(net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.tanh)
-
-        return net
-
 _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
 
-
 # architecture of the discriminator network
-def infogan_discriminator(img, unused_conditioning, weight_decay=2.5e-5, continuous_dim=2):
+def infogan_discriminator(img, unused_conditioning, weight_decay_dis, continuous_dim=2):
     with tf.contrib.framework.arg_scope(
     [layers.conv2d, layers.fully_connected],
     activation_fn=_leaky_relu, normalizer_fn=None,
-    weights_regularizer=layers.l2_regularizer(2.5e-5),
-    biases_regularizer=layers.l2_regularizer(2.5e-5)):
+    weights_regularizer=layers.l2_regularizer(weight_decay_dis),
+    biases_regularizer=layers.l2_regularizer(weight_decay_dis)):
         net = layers.conv2d(img, 64, [4, 4], stride=2)
         net = layers.conv2d(net, 128, [4, 4], stride=2)
         net = layers.flatten(net)

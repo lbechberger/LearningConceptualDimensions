@@ -41,7 +41,9 @@ options['gen_lr'] = 1e-3
 options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
-options['type_latent'] = 'uniform'
+options['type_latent'] = 'u'
+options['weight_decay_gen'] = 2.5e-5
+options['weight_decay_dis'] = 2.5e-5
 
 # read configuration file
 config_name = sys.argv[1]
@@ -69,6 +71,8 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
+    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
+    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
 
 parse_range('epochs')
 
@@ -92,7 +96,7 @@ def infogan_generator(inputs):
     with tf.contrib.framework.arg_scope(
       [layers.fully_connected, layers.conv2d_transpose],
       activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
-      weights_regularizer=layers.l2_regularizer(2.5e-5)):
+      weights_regularizer=layers.l2_regularizer(weight_decay_gen)):
         unstructured_noise, cont_noise = inputs
         noise = tf.concat([unstructured_noise, cont_noise], axis=1)
         net = layers.fully_connected(noise, 1024)
@@ -108,12 +112,12 @@ def infogan_generator(inputs):
 _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
 
 # architecture of the discriminator network
-def infogan_discriminator(img, unused_conditioning, weight_decay=2.5e-5, continuous_dim=2):
+def infogan_discriminator(img, unused_conditioning, weight_decay_dis, continuous_dim=2):
     with tf.contrib.framework.arg_scope(
     [layers.conv2d, layers.fully_connected],
     activation_fn=_leaky_relu, normalizer_fn=None,
-    weights_regularizer=layers.l2_regularizer(2.5e-5),
-    biases_regularizer=layers.l2_regularizer(2.5e-5)):
+    weights_regularizer=layers.l2_regularizer(weight_decay_dis),
+    biases_regularizer=layers.l2_regularizer(weight_decay_dis)):
         net = layers.conv2d(img, 64, [4, 4], stride=2)
         net = layers.conv2d(net, 128, [4, 4], stride=2)
         net = layers.flatten(net)

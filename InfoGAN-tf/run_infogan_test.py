@@ -32,7 +32,7 @@ ds = tf.contrib.distributions
 import functools
 from configparser import RawConfigParser
 from datetime import datetime
-from helperfunctions import get_eval_noise,infogan_generator,float_image_to_uint8,infogan_discriminator
+from helperfunctions import get_eval_noise,float_image_to_uint8,infogan_discriminator
 
 
 timestamp = str(datetime.now()).replace(' ','-')
@@ -59,7 +59,9 @@ options['gen_lr'] = 1e-3
 options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
-options['type_latent'] = 'uniform'
+options['type_latent'] = 'u'
+options['weight_decay_gen'] = 2.5e-5
+options['weight_decay_dis'] = 2.5e-5
 
 # read configuration file
 config_name = sys.argv[1]
@@ -87,6 +89,8 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
+    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
+    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
 
 parse_range('epochs')
 
@@ -105,7 +109,23 @@ print("Starting InfoGAN training. Here are my parameters:")
 print(options)
 print("Length of data set: {0}".format(length_of_data_set))
 
+# architecture of the generator network
+def infogan_generator(inputs):
+    with tf.contrib.framework.arg_scope(
+            [layers.fully_connected, layers.conv2d_transpose],
+            activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
+            weights_regularizer=layers.l2_regularizer(options['weight_decay_gen'])):
+        unstructured_noise, cont_noise = inputs
+        noise = tf.concat([unstructured_noise, cont_noise], axis=1)
+        net = layers.fully_connected(noise, 1024)
+        net = layers.fully_connected(net, 7 * 7 * 128)
+        net = tf.reshape(net, [-1, 7, 7, 128])
+        net = layers.conv2d_transpose(net, 64, [4, 4], stride=2)
+        net = layers.conv2d_transpose(net, 32, [4, 4], stride=2)
+        # Make sure that generator output is in the same range as `inputs`, i.e. [-1, 1].
+        net = layers.conv2d(net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.tanh)
 
+        return net
 
 _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
 
@@ -137,7 +157,7 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
 
 
 # Build the generator and discriminator.
-discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'])
+discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'], weight_decay_dis=options['weight_decay_dis'])
 unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'], options['noise_dims'])
 
 # Create the overall GAN
@@ -209,8 +229,8 @@ with tf.Session(config=config) as sess:
 print(checkpointsaver) # save all checkpointfile/model names in a txt file to find them later for evaluation
 
 f = open("checkpoints.txt", "w")
-strukturierter_text = "\n".join(checkpointsaver)
 for modelname in checkpointsaver:
-    f.write(strukturierter_text)
+    f.write(modelname + '\n')
 f.close()
 
+#print (tf.trainable_variables())
