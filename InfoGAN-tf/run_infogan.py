@@ -92,7 +92,7 @@ print(options)
 print("Length of data set: {0}".format(length_of_data_set))
 
 # architecture of the generator network
-def infogan_generator(inputs):
+def infogan_generator(inputs, weight_decay_gen=9e-5):
     with tf.contrib.framework.arg_scope(
       [layers.fully_connected, layers.conv2d_transpose],
       activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
@@ -112,7 +112,7 @@ def infogan_generator(inputs):
 _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
 
 # architecture of the discriminator network
-def infogan_discriminator(img, unused_conditioning, weight_decay_dis, continuous_dim=2):
+def infogan_discriminator(img, unused_conditioning, weight_decay_dis=9e-5, continuous_dim=2):
     with tf.contrib.framework.arg_scope(
     [layers.conv2d, layers.fully_connected],
     activation_fn=_leaky_relu, normalizer_fn=None,
@@ -206,12 +206,13 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
 
 
 # Build the generator and discriminator.
-discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'])
+discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'], weight_decay_dis=options['weight_decay_dis'])
+generator_fn = functools.partial(infogan_generator, weight_decay_gen=options['weight_decay_gen'])
 unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'], options['noise_dims'])
 
 # Create the overall GAN
 gan_model = tfgan.infogan_model(
-    generator_fn=infogan_generator,
+    generator_fn=generator_fn,
     discriminator_fn=discriminator_fn,
     real_data=batch_images,
     unstructured_generator_inputs=unstructured_inputs,
@@ -241,7 +242,7 @@ real_targets = data_iterator[1]
 
 # ... and now the latent code
 with tf.variable_scope('Discriminator', reuse=True):
-    latent_code = (infogan_discriminator(real_images, None)[1][0]).loc
+    latent_code = (discriminator_fn(real_images, None)[1][0]).loc
 
 evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
