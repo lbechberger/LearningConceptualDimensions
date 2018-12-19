@@ -235,17 +235,6 @@ train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
 
-# define the subsequent evaluation: ... first the data
-data_iterator = dataset.make_one_shot_iterator().get_next()
-real_images = data_iterator[0]
-real_targets = data_iterator[1]
-
-# ... and now the latent code
-with tf.variable_scope('Discriminator', reuse=True):
-    latent_code = (discriminator_fn(real_images, None)[1][0]).loc
-
-evaluation_output = tf.concat([latent_code, real_targets], axis=1)
-
 # calculate the number of training steps
 num_steps = {}
 max_num_steps = 0
@@ -289,8 +278,8 @@ with tf.Session(config=config) as sess:
             CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
             for i in range(options['latent_dims']):
                 display_noise = get_eval_noise(options['noise_dims'], CONT_SAMPLE_POINTS, options['latent_dims'], i)
-                with tf.variable_scope('Generator', reuse=True):
-                    continuous_image = infogan_generator(display_noise)
+                with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                    continuous_image = gan_model.generator_fn(display_noise)
                 reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
 
                 uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
@@ -304,6 +293,17 @@ with tf.Session(config=config) as sess:
             num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
+            
+            # define the subsequent evaluation: ... first the data
+            data_iterator = dataset.make_one_shot_iterator().get_next()
+            real_images = data_iterator[0]
+            real_targets = data_iterator[1]
+
+            # ... and now the latent code
+            with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+                latent_code = (discriminator_fn(real_images, None)[1][0]).loc           
+            
+            evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
             # compute all the outputs (= [latent_code, real_targets])
             table = []
