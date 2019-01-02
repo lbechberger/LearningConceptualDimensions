@@ -32,8 +32,7 @@ ds = tf.contrib.distributions
 import functools
 from configparser import RawConfigParser
 from datetime import datetime
-from helperfunctions import get_eval_noise,float_image_to_uint8,infogan_discriminator
-
+from helperfunctions import get_eval_noise,float_image_to_uint8,infogan_discriminator, infogan_generator
 
 timestamp = str(datetime.now()).replace(' ','-')
 checkpointsaver = [] 
@@ -60,8 +59,8 @@ options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
 options['type_latent'] = 'u'
-options['weight_decay_gen'] = 2.5e-5
-options['weight_decay_dis'] = 2.5e-5
+options['g_weight_decay_gen'] = 2.5e-5
+options['d_weight_decay_dis'] = 2.5e-5
 
 # read configuration file
 config_name = sys.argv[1]
@@ -89,8 +88,8 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
-    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
-    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
+    options['g_weight_decay_gen'] = config.get(config_name, 'g_weight_decay_gen')
+    options['d_weight_decay_dis'] = config.get(config_name, 'd_weight_decay_dis')
 
 parse_range('epochs')
 
@@ -109,28 +108,25 @@ print("Starting InfoGAN training. Here are my parameters:")
 print(options)
 print("Length of data set: {0}".format(length_of_data_set))
 
-# architecture of the generator network
-def infogan_generator(inputs):
-    with tf.contrib.framework.arg_scope(
-            [layers.fully_connected, layers.conv2d_transpose],
-            activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
-            weights_regularizer=layers.l2_regularizer(options['weight_decay_gen'])):
-        unstructured_noise, cont_noise = inputs
-        noise = tf.concat([unstructured_noise, cont_noise], axis=1)
-        net = layers.fully_connected(noise, 1024)
-        net = layers.fully_connected(net, 7 * 7 * 128)
-        net = tf.reshape(net, [-1, 7, 7, 128])
-        net = layers.conv2d_transpose(net, 64, [4, 4], stride=2)
-        net = layers.conv2d_transpose(net, 32, [4, 4], stride=2)
-        # Make sure that generator output is in the same range as `inputs`, i.e. [-1, 1].
-        net = layers.conv2d(net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.tanh)
-
-        return net
+# # architecture of the generator network
+# def infogan_generator(inputs, g_weight_decay_gen=9e-5):
+#     with tf.contrib.framework.arg_scope(
+#             [layers.fully_connected, layers.conv2d_transpose],
+#             activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
+#             weights_regularizer=layers.l2_regularizer(g_weight_decay_gen)):
+#         unstructured_noise, cont_noise = inputs
+#         noise = tf.concat([unstructured_noise, cont_noise], axis=1)
+#         net = layers.fully_connected(noise, 1024)
+#         net = layers.fully_connected(net, 7 * 7 * 128)
+#         net = tf.reshape(net, [-1, 7, 7, 128])
+#         net = layers.conv2d_transpose(net, 64, [4, 4], stride=2)
+#         net = layers.conv2d_transpose(net, 32, [4, 4], stride=2)
+#         # Make sure that generator output is in the same range as `inputs`, i.e. [-1, 1].
+#         net = layers.conv2d(net, 1, [4, 4], normalizer_fn=None, activation_fn=tf.nn.tanh)
+# 
+#         return net
 
 _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
-
-
-
 
 def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
     """Get unstructured and structured noise for InfoGAN.
@@ -157,12 +153,13 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
 
 
 # Build the generator and discriminator.
-discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'], weight_decay_dis=options['weight_decay_dis'])
+discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'], d_weight_decay_dis=options['d_weight_decay_dis'])
+generator_fn = functools.partial(infogan_generator, g_weight_decay_gen=options['g_weight_decay_gen'])
 unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'], options['noise_dims'])
 
 # Create the overall GAN
 gan_model = tfgan.infogan_model(
-    generator_fn=infogan_generator,
+    generator_fn=generator_fn,
     discriminator_fn=discriminator_fn,
     real_data=batch_images,
     unstructured_generator_inputs=unstructured_inputs,
@@ -185,7 +182,6 @@ train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
 
-
 # calculate the number of training steps
 num_steps = {}
 max_num_steps = 0
@@ -197,12 +193,12 @@ for epoch in options['epochs']:
 print("Number of training steps: {0}".format(max_num_steps))
 
 
+    
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 with tf.Session(config=config) as sess:
     # initialize all variables
     sess.run(tf.global_variables_initializer())
-    
     for step in range(max_num_steps):
         # train the network
         cur_loss, _ = train_step_fn(sess, train_ops, global_step, train_step_kwargs={})
@@ -215,22 +211,24 @@ with tf.Session(config=config) as sess:
             epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
 
-            #Save the graph https://www.tensorflow.org/api_docs/python/tf/train/Saver
-            cwd = os.getcwd()  #returns current working directory of a process
-            checkpoint_dir = os.path.join(cwd+'/graphs') #building a directory called 'graphs' 
-                                                         #for the checkpoint data in the current directory
+            #Save the graph 
+            cwd = os.getcwd()
+            checkpoint_dir = os.path.join(cwd+'/graphs')
             if not os.path.exists(checkpoint_dir):
                 os.makedirs(checkpoint_dir)
             model = timestamp + str(epoch) + config_name +'.model'
+            #ganmodel = timestamp + str(epoch) + config_name +'.ganmodel'
             checkpoint = os.path.join(checkpoint_dir, model)
+            #checkpointgan = os.path.join(checkpoint_dir, ganmodel)
             saver = tf.train.Saver()
             saver.save(sess, checkpoint)
-            checkpointsaver.append(model+ " " + config_name)
-print(checkpointsaver) # save all checkpointfile/model names in a txt file to find them later for evaluation
+            checkpointsaver.append(model + " " + config_name)
+                
+print(checkpointsaver)
+# save all checkpointfile/model names in a txt file to find them later for evaluation
 
 f = open("checkpoints.txt", "w")
 for modelname in checkpointsaver:
-    f.write(modelname + '\n')
+    f.write(modelname)
+f.write('/n')
 f.close()
-
-#print (tf.trainable_variables())
