@@ -15,7 +15,6 @@ Created on Fri Nov  9
 
 
 import numpy as np
-
 import tensorflow as tf
 tfgan = tf.contrib.gan
 layers = tf.contrib.layers
@@ -23,10 +22,26 @@ ds = tf.contrib.distributions
 
 
 from six.moves import xrange
+from scipy import sum, average
 
 
 # architecture of the generator network
 def infogan_generator(inputs, g_weight_decay_gen=9e-5):
+    """InfoGAN generator network on MNIST digits.
+     Based on a paper https://arxiv.org/abs/1606.03657, their code
+     https://github.com/openai/InfoGAN, and code by pooleb@.
+     Args:
+       inputs: A 3-tuple of Tensors (unstructured_noise, categorical structured
+         noise, continuous structured noise). `inputs[0]` and `inputs[2]` must be
+         2D, and `inputs[1]` must be 1D. All must have the same first dimension.
+       categorical_dim: Dimensions of the incompressible categorical noise.
+       weight_decay: The value of the l2 weight decay.
+       is_training: If `True`, batch norm uses batch statistics. If `False`, batch
+         norm uses the exponential moving average collected from population
+         statistics.
+     Returns:
+       A generated image in the range [-1, 1].
+     """
     with tf.contrib.framework.arg_scope(
             [layers.fully_connected, layers.conv2d_transpose],
             activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
@@ -48,6 +63,22 @@ _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
 
 # architecture of the discriminator network
 def infogan_discriminator(img, unused_conditioning, d_weight_decay_dis=9e-5, continuous_dim=2):
+    """InfoGAN discriminator network on MNIST digits.
+      Based on a paper https://arxiv.org/abs/1606.03657, their code
+      https://github.com/openai/InfoGAN, and code by pooleb@.
+      Args:
+        img: Real or generated MNIST digits. Should be in the range [-1, 1].
+        unused_conditioning: The TFGAN API can help with conditional GANs, which
+          would require extra `condition` information to both the generator and the
+          discriminator. Since this example is not conditional, we do not use this
+          argument.
+        weight_decay: The L2 weight decay.
+        categorical_dim: Dimensions of the incompressible categorical noise.
+        continuous_dim: Dimensions of the incompressible continuous noise.
+      Returns:
+        Logits for the probability that the image is real, and a list of posterior
+        distributions for each of the noise vectors.
+      """
     with tf.contrib.framework.arg_scope(
             [layers.conv2d, layers.fully_connected],
             activation_fn=_leaky_relu, normalizer_fn=None,
@@ -120,3 +151,12 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
 def float_image_to_uint8(image):
     scaled = (image * 127.5) + 127.5
     return tf.cast(scaled, tf.uint8)
+
+
+#from https://stackoverflow.com/questions/189943/how-can-i-quantify-difference-between-two-images 
+def to_grayscale(arr):
+    "If arr is a color image (3D array), convert it to grayscale (2D array)."
+    if len(arr.shape) == 3:
+        return average(arr, -1)  # average over the last axis (color channels)
+    else:
+        return arr

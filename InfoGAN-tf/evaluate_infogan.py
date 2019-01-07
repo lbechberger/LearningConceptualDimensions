@@ -18,7 +18,9 @@ import functools
 import tensorflow as tf
 from datetime import datetime
 from configparser import RawConfigParser
-from helperfunctions import get_eval_noise, float_image_to_uint8, infogan_discriminator, infogan_generator
+from helperfunctions import infogan_discriminator, infogan_generator, to_grayscale
+from scipy.misc import imread
+from scipy import sum, average
 
 timestamp = str(datetime.now()).replace(' ','-')
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
@@ -85,6 +87,44 @@ dataset = tf.data.Dataset.from_tensor_slices((images, labels))
 dataset = dataset.shuffle(20480).repeat().batch(options['batch_size'])
 batch_images = dataset.make_one_shot_iterator().get_next()[0]
 
+### 
+def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
+    """Get unstructured and structured noise for InfoGAN.
+    Args:
+        batch_size: The number of noise vectors to generate.
+        structured_continuous_dim: The number of dimensions of the uniform continuous noise.
+        total_continuous_noise_dims: The number of continuous noise dimensions. This number includes the structured and unstructured noise.
+    Returns:
+        A 2-tuple of structured and unstructured noise. First element is the
+        unstructured noise, and the second is the continuous structured noise."""
+    # Get unstructurd noise.
+    unstructured_noise = tf.random_normal([batch_size, noise_dims])
+
+    # Get continuous noise Tensor.
+    if options['type_latent'] == 'u':
+        continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]), tf.ones([structured_continuous_dim]))
+        continuous_noise = continuous_dist.sample([batch_size])
+    elif options['type_latent'] == 'n':
+        continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean = 0.0, stddev = 0.5)
+    else:
+        raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
+
+    return [unstructured_noise], [continuous_noise]
+
+# # Build the generator and discriminator.
+# discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'], d_weight_decay_dis=options['d_weight_decay_dis'])
+# generator_fn = functools.partial(infogan_generator, g_weight_decay_gen=options['g_weight_decay_gen'])
+# unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'], options['noise_dims'])
+# 
+# # Create the overall GAN
+# gan_model = tfgan.infogan_model(
+#     generator_fn=generator_fn,
+#     discriminator_fn=discriminator_fn,
+#     real_data=batch_images,
+#     unstructured_generator_inputs=unstructured_inputs,
+#     structured_generator_inputs=structured_inputs)
+
+
 
 def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
     """Get unstructured and structured noise for InfoGAN.
@@ -117,27 +157,15 @@ for epoch in options['epochs']:
     num_steps[steps] = epoch
     max_num_steps = max(max_num_steps, steps)
 
-# Build the generator and discriminator.
-discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'], d_weight_decay_dis=options['d_weight_decay_dis'])
-generator_fn = functools.partial(infogan_generator, g_weight_decay_gen=options['g_weight_decay_gen'])
-unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'], options['noise_dims'])
-
-# Create the overall GAN
-gan_model = tfgan.infogan_model(
-    generator_fn=generator_fn,
-    discriminator_fn=discriminator_fn,
-    real_data=batch_images,
-    unstructured_generator_inputs=unstructured_inputs,
-    structured_generator_inputs=structured_inputs)
 
 #retrieve graph            
 with tf.Session() as sess:
     sess.run(tf.global_variables_initializer())
     saver = tf.train.import_meta_graph('graphs/'+ model_name + '.meta')
-    saver.restore(sess, 'graphs/'+ model_name)
+    gan_model = saver.restore(sess, 'graphs/'+ model_name)
     print("Model restored")
     #gan_model = tf.saved_model.loader.load(sess, None, export_dir= gan_model_name)
-    #print(gan_model)
+    print(gan_model)
     print(tf.trainable_variables())
     
     #print(sess.run(tf.trainable_variables()[10]).eval())
@@ -155,8 +183,11 @@ with tf.Session() as sess:
     real_targets = data_iterator[1]
 
     # ... and now the latent code
-    with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
-        latent_code = (discriminator_fn(real_images, None)[1][0]).loc
+    ivate with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+        latent_code = (discriminator_fn(real_images, None)[1][0]).loc # .loc = mean ?
+        # discriminator_fn: A python lambda that takes `real_data`/`generated data`
+        #       and `generator_inputs`. Outputs a 2-tuple of (logits, distribution_list).
+        #       `logits` are in the range [-inf, inf]
 
     evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 

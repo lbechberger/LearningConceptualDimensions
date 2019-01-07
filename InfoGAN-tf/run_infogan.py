@@ -229,7 +229,6 @@ train_ops = tfgan.gan_train_ops(
     discriminator_optimizer=tf.train.AdamOptimizer(options['dis_lr'], 0.5),
     summarize_gradients=True)
 
-
 # preparing everything for training
 train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
@@ -248,6 +247,55 @@ print("Number of training steps: {0}".format(max_num_steps))
 def float_image_to_uint8(image):
     scaled = (image * 127.5) + 127.5
     return tf.cast(scaled, tf.uint8)
+
+
+#--------------------------- New Evaluationfunctions ------------------------------
+
+# 1) Latent Codes as a list
+# 2) Image reconstruction Error
+def imagesInCodesAndImagesOut(image_batch):
+    # Die Vorgänge können natürlich in eine Schleife, wenn alles funktioniert, jetzt nur zur Übersicht einzen:
+
+    #1. Eine Liste von latenten Codes (die von den Rechtecken aus unserem Datenset generiert wurden), 
+    # genau so sortiert wie die Rechtecke im Datenset (d.h. erster Eintrag dieser Liste korrespondiert 
+    # zum ersten Rechteck aus dem Datenset etc.)
+
+    #feed images into the generator to get the according latent codes
+    # net = gan_model.generator_scope(image_batch)
+    # listOfCodes1 =[]
+    # for image in image_batch:
+    #     with tf.variable_scope(gan_model.generator_scope, reuse=True):
+    #         latent_code = (generator_fn(image)).loc
+    #         #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
+    #     listOfCodes1.append(latent_code)
+    #oder: alle Bilder durch discriminator und encoder schicken und liste von discriminator speichern
+    # listOfCodes2 = []
+    # for image in image_batch:
+    #     with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+    #         latent_code = (discriminator_fn(image, None)[1][0]).loc
+    #         #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
+    #     listOfCodes2.append(latent_code)
+    listOfCodes = []
+
+    #2. Bild durch das Netz schicken, neues generiertes Bild vergleichen
+    generatedImages= []
+    for image in image_batch:
+        with tf.variable_scope(gan_model.generator_scope, reuse=True):
+            generatedImage = (generator_fn(image, None)[0][1]).loc # [?][?]
+            #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
+        generatedImages.append(generatedImage)
+    return (listOfCodes, generatedImages)
+
+
+#3) Inverse / latend code reconstruction error
+def codesInCodesOut(code_batch):
+    return (ndarrayOfCodes)
+
+#4) 
+def samples(code_batch):
+    return (ndarrayOfImages)
+# -----------------------------------------------------------------------------
+
 
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
@@ -288,7 +336,6 @@ with tf.Session(config=config) as sess:
                                                             tf.image.encode_png(uint8_continuous[0]))
                 sess.run(image_write_op)
 
-
             # now evaluate the current latent codes
             num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
@@ -304,6 +351,49 @@ with tf.Session(config=config) as sess:
                 latent_code = (discriminator_fn(real_images, None)[1][0]).loc           
             
             evaluation_output = tf.concat([latent_code, real_targets], axis=1)
+
+################ Perfor the new Evaluation
+        
+            #1) Latent Codes as a list and 2) Image reconstruction Error
+            # get the list of latent codes produced by the generator, feeding it the according input images
+            # get the reconstructed images produced by sending real image through the net and letting it reconstruct it
+            # get the reconstruction error using the manhattan distance 
+            # get the reconstruction error using the eucledean distance
+            listOfLatentCodes, listOfReconstructedImages =  imagesInCodesAndImagesOut(real_images)
+            counter = 0
+            imRecErrorL1_sum = 0
+            imRecErrorL2_sum = 0
+            for img1 in listOfReconstructedImages and img2 in real_images:
+                # calculate reconstruction error of images
+                #from https://stackoverflow.com/questions/189943/how-can-i-quantify-difference-between-two-images
+                img1 = to_grayscale(imread(image).astype(float))
+                img2 = to_grayscale(imread(generatedImage).astype(float))
+                dist_euclidean = sqrt(sum((img1 - img2)^2)) / img1.size
+                dist_manhattan = sum(abs(img1 - img2)) / img1.size
+                print ("Eucledian Distance: "+ dist_euclidean+ "/ per pixel: "+ dist_euclidean/ img1.size)
+                print ("Manhattan Distance: "+ dist_manhattan+ "/ per pixel: "+ dist_manhattan/ img1.size)
+        
+                counter += 1
+                imRecErrorL1_sum = imRecErrorL1_sum + dist_manhattan
+                imRecErrorL2_sum = imRecErrorL2_sum + dist_euclidean
+
+            l1 = imRecErrorL1_sum/counter
+            l2 = imRecErrorL2_sum/counter
+
+            print ("Latent Codes: " + listOfLatentCodes)
+            print ("L1: " + l1)
+            print ("L2: " + l2)
+
+            #3) sample 10240 latent codes / randomly generated (with seed)
+            for latCode in latCodes:
+                # In codesInCodesOut: 
+                # with the latent code, generate an image (generator) - for this, constant (normal distributed) noise is needed (mean = 0)
+                # take the image as an input for the generator get a reconstructed latent code
+                #calculate recError
+                recLatCode = codesInCodesOut(LatentCode)
+                latRecError = 0 #Differnece between LatentCode and recLatCode
+
+###############################################
 
             # compute all the outputs (= [latent_code, real_targets])
             table = []

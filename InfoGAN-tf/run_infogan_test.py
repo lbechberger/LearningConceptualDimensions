@@ -127,6 +127,7 @@ print("Length of data set: {0}".format(length_of_data_set))
 #         return net
 
 _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
+        
 
 def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
     """Get unstructured and structured noise for InfoGAN.
@@ -157,6 +158,36 @@ discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=optio
 generator_fn = functools.partial(infogan_generator, g_weight_decay_gen=options['g_weight_decay_gen'])
 unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'], options['noise_dims'])
 
+"""Returns an InfoGAN model outputs and variables.
+  See https://arxiv.org/abs/1606.03657 for more details.
+  Args:
+    generator_fn: A python lambda that takes a list of Tensors as inputs and
+      returns the outputs of the GAN generator.
+    discriminator_fn: A python lambda that takes `real_data`/`generated data`
+      and `generator_inputs`. Outputs a 2-tuple of (logits, distribution_list).
+      `logits` are in the range [-inf, inf], and `distribution_list` is a list
+      of Tensorflow distributions representing the predicted noise distribution
+      of the ith structure noise.
+    real_data: A Tensor representing the real data.
+    unstructured_generator_inputs: A list of Tensors to the generator.
+      These tensors represent the unstructured noise or conditioning.
+    structured_generator_inputs: A list of Tensors to the generator.
+      These tensors must have high mutual information with the recognizer.
+    generator_scope: Optional generator variable scope. Useful if you want to
+      reuse a subgraph that has already been created.
+    discriminator_scope: Optional discriminator variable scope. Useful if you
+      want to reuse a subgraph that has already been created.
+  Returns:
+    An InfoGANModel namedtuple.
+      (generator_inputs, generated_data, generator_variables, gen_scope, generator_fn,
+      real_data, dis_real_outputs, dis_gen_outputs, discriminator_variables, disc_scope,
+      lambda x, y: discriminator_fn(x, y)[0],  # conform to non-InfoGAN API, 
+      structured_generator_inputs, predicted_distributions, discriminator_fn)
+  Raises:
+    ValueError: If the generator outputs a Tensor that isn't the same shape as
+      `real_data`.
+    ValueError: If the discriminator output is malformed.
+  """
 # Create the overall GAN
 gan_model = tfgan.infogan_model(
     generator_fn=generator_fn,
@@ -193,7 +224,6 @@ for epoch in options['epochs']:
 print("Number of training steps: {0}".format(max_num_steps))
 
 
-    
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 with tf.Session(config=config) as sess:
