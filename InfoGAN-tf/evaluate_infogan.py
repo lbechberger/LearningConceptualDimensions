@@ -14,13 +14,17 @@ import numpy as np
 import os, sys
 import ast
 import fcntl
+import functools
 import tensorflow as tf
 from datetime import datetime
 from configparser import RawConfigParser
-from helperfunctions import get_eval_noise, float_image_to_uint8, infogan_discriminator
+from helperfunctions import get_eval_noise, float_image_to_uint8, infogan_discriminator, infogan_generator
 
 timestamp = str(datetime.now()).replace(' ','-')
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
+tfgan = tf.contrib.gan
+ds = tf.contrib.distributions
+
 # default values for options
 options = {}
 options['train_log_dir'] = 'logs'
@@ -33,9 +37,9 @@ options['gen_lr'] = 1e-3
 options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
-options['type_latent'] = 'uniform'
-options['weight_decay_gen'] = 2.5e-5
-options['weight_decay_dis'] = 2.5e-5
+options['type_latent'] = 'u'
+options['g_weight_decay_gen'] = 2.5e-5
+options['d_weight_decay_dis'] = 2.5e-5
 
 # read configuration file
 model_name = sys.argv[1] #takes name of the modeltitle as an argument, e.g. '2018-12-05-12:12:49.8405241dummy.model'
@@ -64,12 +68,13 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
-    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
-    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
+    options['g_weight_decay_gen'] = config.get(config_name, 'g_weight_decay_gen')
+    options['d_weight_decay_dis'] = config.get(config_name, 'd_weight_decay_dis')
+
 
 parse_range('epochs')
 
-#### Set up the input
+# Set up the input
 input_data = pickle.load(open(options['training_file'], 'rb'), encoding='latin1')
 rectangles = np.array(list(map(lambda x: x[0], input_data['data'])), dtype=np.float32)
 labels = np.array(list(map(lambda x: x[1:], input_data['data'])), dtype=np.float32)
@@ -81,18 +86,28 @@ dataset = dataset.shuffle(20480).repeat().batch(options['batch_size'])
 batch_images = dataset.make_one_shot_iterator().get_next()[0]
 
 
+def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
+    """Get unstructured and structured noise for InfoGAN.
+    Args:
+        batch_size: The number of noise vectors to generate.
+        structured_continuous_dim: The number of dimensions of the uniform continuous noise.
+        total_continuous_noise_dims: The number of continuous noise dimensions. This number includes the structured and unstructured noise.
+    Returns:
+        A 2-tuple of structured and unstructured noise. First element is the
+        unstructured noise, and the second is the continuous structured noise."""
+    # Get unstructurd noise.
+    unstructured_noise = tf.random_normal([batch_size, noise_dims])
 
-# define the subsequent evaluation: ... first the data
-data_iterator = dataset.make_one_shot_iterator().get_next()
-real_images = data_iterator[0]
-real_targets = data_iterator[1]
+    # Get continuous noise Tensor.
+    if options['type_latent'] == 'u':
+        continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]), tf.ones([structured_continuous_dim]))
+        continuous_noise = continuous_dist.sample([batch_size])
+    elif options['type_latent'] == 'n':
+        continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean = 0.0, stddev = 0.5)
+    else:
+        raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
 
-
-# ... and now the latent code
-with tf.variable_scope('Discriminator', reuse=tf.AUTO_REUSE):
-    latent_code = (infogan_discriminator(real_images, None, weight_decay_dis=options['weight_decay_dis'])[1][0]).loc
-
-evaluation_output = tf.concat([latent_code, real_targets], axis=1)
+    return [unstructured_noise], [continuous_noise]
 
 # calculate the number of training steps
 num_steps = {}
@@ -102,6 +117,18 @@ for epoch in options['epochs']:
     num_steps[steps] = epoch
     max_num_steps = max(max_num_steps, steps)
 
+# Build the generator and discriminator.
+discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'], d_weight_decay_dis=options['d_weight_decay_dis'])
+generator_fn = functools.partial(infogan_generator, g_weight_decay_gen=options['g_weight_decay_gen'])
+unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'], options['noise_dims'])
+
+# Create the overall GAN
+gan_model = tfgan.infogan_model(
+    generator_fn=generator_fn,
+    discriminator_fn=discriminator_fn,
+    real_data=batch_images,
+    unstructured_generator_inputs=unstructured_inputs,
+    structured_generator_inputs=structured_inputs)
 
 #retrieve graph            
 with tf.Session() as sess:
@@ -109,15 +136,29 @@ with tf.Session() as sess:
     saver = tf.train.import_meta_graph('graphs/'+ model_name + '.meta')
     saver.restore(sess, 'graphs/'+ model_name)
     print("Model restored")
+    #gan_model = tf.saved_model.loader.load(sess, None, export_dir= gan_model_name)
+    #print(gan_model)
     print(tf.trainable_variables())
-    # print(sess.run(tf.trainable_variables()[10]))
+    
+    #print(sess.run(tf.trainable_variables()[10]).eval())
 
     ###start evaluation###
 
     # now evaluate the current latent codes
     num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
-    epoch_name = "{0}-{1}-ep{2}".format(model_name, config_name, epoch)
+    epoch_name = "{0}-ep{1}".format(config_name, epoch)
     print(epoch_name)
+
+    # define the subsequent evaluation: ... first the data
+    data_iterator = dataset.make_one_shot_iterator().get_next()
+    real_images = data_iterator[0]
+    real_targets = data_iterator[1]
+
+    # ... and now the latent code
+    with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+        latent_code = (discriminator_fn(real_images, None)[1][0]).loc
+
+    evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
     # compute all the outputs (= [latent_code, real_targets])
     table = []
@@ -170,7 +211,6 @@ with tf.Session() as sess:
         print("latent_{0} (range {1}): best interpreted as '{2}' ({3})".format(latent_dim, ranges[latent_dim], best_name_latent_correlation[latent_dim], max_correlation_latent[latent_dim]))
         for dimension in dimension_names:
             print("\t {0}: {1}".format(dimension, output[dimension][latent_dim]))
-
 
     # create output file if necessary
     file_name = os.path.join(options['output_dir'],'interpretabilities.csv')

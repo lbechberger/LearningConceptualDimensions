@@ -43,8 +43,8 @@ options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
 options['type_latent'] = 'u'
-options['weight_decay_gen'] = 2.5e-5
-options['weight_decay_dis'] = 2.5e-5
+options['g_weight_decay_gen'] = 2.5e-5
+options['d_weight_decay_dis'] = 2.5e-5
 
 # read configuration file
 config_name = sys.argv[1]
@@ -74,8 +74,8 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
-    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
-    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
+    options['g_weight_decay_gen'] = config.get(config_name, 'g_weight_decay_gen')
+    options['d_weight_decay_dis'] = config.get(config_name, 'd_weight_decay_dis')
 
 parse_range('epochs')
 
@@ -96,11 +96,11 @@ print("Length of data set: {0}".format(length_of_data_set))
 
 
 # architecture of the generator network
-def infogan_generator(inputs):
+def infogan_generator(inputs, g_weight_decay_gen=9e-5):
     with tf.contrib.framework.arg_scope(
             [layers.fully_connected, layers.conv2d_transpose],
             activation_fn=tf.nn.relu, normalizer_fn=layers.batch_norm,
-            weights_regularizer=layers.l2_regularizer(weight_decay_gen)):
+            weights_regularizer=layers.l2_regularizer(g_weight_decay_gen)):
         unstructured_noise, cont_noise = inputs
         noise = tf.concat([unstructured_noise, cont_noise], axis=1)
         net = layers.fully_connected(noise, 1024)
@@ -118,12 +118,12 @@ _leaky_relu = lambda x: tf.nn.leaky_relu(x, alpha=0.1)
 
 
 # architecture of the discriminator network
-def infogan_discriminator(img, unused_conditioning, weight_decay_dis, continuous_dim=2):
+def infogan_discriminator(img, unused_conditioning, d_weight_decay_dis=9e-5, continuous_dim=2):
     with tf.contrib.framework.arg_scope(
             [layers.conv2d, layers.fully_connected],
             activation_fn=_leaky_relu, normalizer_fn=None,
-            weights_regularizer=layers.l2_regularizer(weight_decay_dis),
-            biases_regularizer=layers.l2_regularizer(weight_decay_dis)):
+            weights_regularizer=layers.l2_regularizer(d_weight_decay_dis),
+            biases_regularizer=layers.l2_regularizer(d_weight_decay_dis)):
         net = layers.conv2d(img, 64, [4, 4], stride=2)
         net = layers.conv2d(net, 128, [4, 4], stride=2)
         net = layers.flatten(net)
@@ -213,13 +213,15 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
 
 
 # Build the generator and discriminator.
-discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'])
+discriminator_fn = functools.partial(infogan_discriminator, continuous_dim=options['latent_dims'],
+                                     d_weight_decay_dis=options['d_weight_decay_dis'])
+generator_fn = functools.partial(infogan_generator, g_weight_decay_gen=options['g_weight_decay_gen'])
 unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'], options['latent_dims'],
                                                             options['noise_dims'])
 
 # Create the overall GAN
 gan_model = tfgan.infogan_model(
-    generator_fn=infogan_generator,
+    generator_fn=generator_fn,
     discriminator_fn=discriminator_fn,
     real_data=batch_images,
     unstructured_generator_inputs=unstructured_inputs,
@@ -242,17 +244,6 @@ train_step_fn = tfgan.get_sequential_train_steps()
 global_step = tf.train.get_or_create_global_step()
 loss_values = []
 
-# define the subsequent evaluation: ... first the data
-data_iterator = dataset.make_one_shot_iterator().get_next()
-real_images = data_iterator[0]
-real_targets = data_iterator[1]
-
-# ... and now the latent code
-with tf.variable_scope('Discriminator', reuse=True):
-    latent_code = (infogan_discriminator(real_images, None)[1][0]).loc
-
-evaluation_output = tf.concat([latent_code, real_targets], axis=1)
-
 # calculate the number of training steps
 num_steps = {}
 max_num_steps = 0
@@ -267,6 +258,57 @@ print("Number of training steps: {0}".format(max_num_steps))
 def float_image_to_uint8(image):
     scaled = (image * 127.5) + 127.5
     return tf.cast(scaled, tf.uint8)
+
+
+# --------------------------- New Evaluationfunctions ------------------------------
+
+# 1) Latent Codes as a list
+# 2) Image reconstruction Error
+def imagesInCodesAndImagesOut(image_batch):
+    # Die Vorgänge können natürlich in eine Schleife, wenn alles funktioniert, jetzt nur zur Übersicht einzen:
+
+    # 1. Eine Liste von latenten Codes (die von den Rechtecken aus unserem Datenset generiert wurden),
+    # genau so sortiert wie die Rechtecke im Datenset (d.h. erster Eintrag dieser Liste korrespondiert
+    # zum ersten Rechteck aus dem Datenset etc.)
+
+    # feed images into the generator to get the according latent codes
+    # net = gan_model.generator_scope(image_batch)
+    # listOfCodes1 =[]
+    # for image in image_batch:
+    #     with tf.variable_scope(gan_model.generator_scope, reuse=True):
+    #         latent_code = (generator_fn(image)).loc
+    #         #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
+    #     listOfCodes1.append(latent_code)
+    # oder: alle Bilder durch discriminator und encoder schicken und liste von discriminator speichern
+    # listOfCodes2 = []
+    # for image in image_batch:
+    #     with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+    #         latent_code = (discriminator_fn(image, None)[1][0]).loc
+    #         #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
+    #     listOfCodes2.append(latent_code)
+    listOfCodes = []
+
+    # 2. Bild durch das Netz schicken, neues generiertes Bild vergleichen
+    generatedImages = []
+    for image in image_batch:
+        with tf.variable_scope(gan_model.generator_scope, reuse=True):
+            generatedImage = (generator_fn(image, None)[0][1]).loc  # [?][?]
+            # must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
+        generatedImages.append(generatedImage)
+    return (listOfCodes, generatedImages)
+
+
+# 3) Inverse / latend code reconstruction error
+def codesInCodesOut(code_batch):
+    return (ndarrayOfCodes)
+
+
+# 4)
+def samples(code_batch):
+    return (ndarrayOfImages)
+
+
+# -----------------------------------------------------------------------------
 
 
 config = tf.ConfigProto()
@@ -298,8 +340,8 @@ with tf.Session(config=config) as sess:
             CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
             for i in range(options['latent_dims']):
                 display_noise = get_eval_noise(options['noise_dims'], CONT_SAMPLE_POINTS, options['latent_dims'], i)
-                with tf.variable_scope('Generator', reuse=True):
-                    continuous_image = infogan_generator(display_noise)
+                with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                    continuous_image = gan_model.generator_fn(display_noise)
                 reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image,
                                                                       num_cols=len(CONT_SAMPLE_POINTS))
 
@@ -315,6 +357,60 @@ with tf.Session(config=config) as sess:
             num_eval_steps = int((1.0 * length_of_data_set) / options['batch_size'])
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
+
+            # define the subsequent evaluation: ... first the data
+            data_iterator = dataset.make_one_shot_iterator().get_next()
+            real_images = data_iterator[0]
+            real_targets = data_iterator[1]
+
+            # ... and now the latent code
+            with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+                latent_code = (discriminator_fn(real_images, None)[1][0]).loc
+
+            evaluation_output = tf.concat([latent_code, real_targets], axis=1)
+
+            ################ Perfor the new Evaluation
+
+            # 1) Latent Codes as a list and 2) Image reconstruction Error
+            # get the list of latent codes produced by the generator, feeding it the according input images
+            # get the reconstructed images produced by sending real image through the net and letting it reconstruct it
+            # get the reconstruction error using the manhattan distance
+            # get the reconstruction error using the eucledean distance
+            listOfLatentCodes, listOfReconstructedImages = imagesInCodesAndImagesOut(real_images)
+            counter = 0
+            imRecErrorL1_sum = 0
+            imRecErrorL2_sum = 0
+            for img1 in listOfReconstructedImages and img2 in real_images:
+                # calculate reconstruction error of images
+                # from https://stackoverflow.com/questions/189943/how-can-i-quantify-difference-between-two-images
+                img1 = to_grayscale(imread(image).astype(float))
+                img2 = to_grayscale(imread(generatedImage).astype(float))
+                dist_euclidean = sqrt(sum((img1 - img2) ^ 2)) / img1.size
+                dist_manhattan = sum(abs(img1 - img2)) / img1.size
+                print("Eucledian Distance: " + dist_euclidean + "/ per pixel: " + dist_euclidean / img1.size)
+                print("Manhattan Distance: " + dist_manhattan + "/ per pixel: " + dist_manhattan / img1.size)
+
+                counter += 1
+                imRecErrorL1_sum = imRecErrorL1_sum + dist_manhattan
+                imRecErrorL2_sum = imRecErrorL2_sum + dist_euclidean
+
+            l1 = imRecErrorL1_sum / counter
+            l2 = imRecErrorL2_sum / counter
+
+            print("Latent Codes: " + listOfLatentCodes)
+            print("L1: " + l1)
+            print("L2: " + l2)
+
+            # 3) sample 10240 latent codes / randomly generated (with seed)
+            for latCode in latCodes:
+                # In codesInCodesOut:
+                # with the latent code, generate an image (generator) - for this, constant (normal distributed) noise is needed (mean = 0)
+                # take the image as an input for the generator get a reconstructed latent code
+                # calculate recError
+                recLatCode = codesInCodesOut(LatentCode)
+                latRecError = 0  # Differnece between LatentCode and recLatCode
+
+            ###############################################
 
             # compute all the outputs (= [latent_code, real_targets])
             table = []
@@ -348,7 +444,7 @@ with tf.Session(config=config) as sess:
                 # check whether we found a better interpretation for a latent variable...
                 for latent_dim in range(options["latent_dims"]):
                     if np.abs(local_correlations[latent_dim]) > max_correlation_latent[latent_dim]:
-                        max_correlation_latent[latent_dim] = np.abs(local_correlations[latet_dim])
+                        max_correlation_latent[latent_dim] = np.abs(local_correlations[latent_dim])
                         best_name_latent_correlation[latent_dim] = dimension
 
             # lower bound for best correlations

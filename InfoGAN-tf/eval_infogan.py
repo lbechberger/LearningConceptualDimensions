@@ -28,7 +28,7 @@ timestamp = str(datetime.now()).replace(' ','-')
 options = {}
 options['train_log_dir'] = 'logs'
 options['output_dir'] = 'output'
-options['training_file'] = '../data/rectangles_v0.05_s0.5.pickle'
+options['training_file'] = '../data/uniform.pickle'
 options['noise_dims'] = 62
 options['latent_dims'] = 2
 options['batch_size'] = 128
@@ -36,9 +36,9 @@ options['gen_lr'] = 1e-3
 options['dis_lr'] = 2e-4
 options['lambda'] = 1.0
 options['epochs'] = '50'
-options['type_latent'] = 'uniform'
-options['weight_decay_gen'] = 2.5e-5
-options['weight_decay_dis'] = 2.5e-5
+options['type_latent'] = 'u'
+options['g_weight_decay_gen'] = 2.5e-5
+options['d_weight_decay_dis'] = 2.5e-5
 
 # read configuration file
 config_name = sys.argv[1]
@@ -67,8 +67,8 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
-    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
-    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
+    options['g_weight_decay_gen'] = config.get(config_name, 'g_weight_decay_gen')
+    options['d_weight_decay_dis'] = config.get(config_name, 'd_weight_decay_dis')
 
 parse_range('epochs')
 
