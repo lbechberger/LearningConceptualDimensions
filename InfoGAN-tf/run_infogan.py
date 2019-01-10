@@ -14,13 +14,13 @@ import numpy as np
 import os, sys
 import fcntl
 import ast
-
+import functools
 import tensorflow as tf
 tfgan = tf.contrib.gan
 layers = tf.contrib.layers
 ds = tf.contrib.distributions
 
-import functools
+
 from six.moves import xrange
 
 from configparser import RawConfigParser
@@ -84,8 +84,10 @@ dimension_names = input_data['dimensions']
 length_of_data_set = len(rectangles)
 images = rectangles.reshape((-1, 28, 28, 1))
 dataset = tf.data.Dataset.from_tensor_slices((images, labels))
-dataset = dataset.shuffle(20480).repeat().batch(options['batch_size'])
-batch_images = dataset.make_one_shot_iterator().get_next()[0]
+dataset_training = dataset.shuffle(20480).repeat().batch(options['batch_size'])
+dataset_evaluation = dataset.repeat().batch(options['batch_size'])
+batch_images_training = dataset_training.make_one_shot_iterator().get_next()[0]
+batch_images_evaluation = dataset_evaluation.make_one_shot_iterator().get_next()[0]
 
 print("Starting InfoGAN training. Here are my parameters:")
 print(options)
@@ -152,7 +154,7 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
         continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]), tf.ones([structured_continuous_dim]))
         continuous_noise = continuous_dist.sample([batch_size])
     elif options['type_latent'] == 'n':
-        continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean = 0.0, stddev = 0.5)
+        continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean = 0.0, stddev = 1.0)
     else:
         raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
 
@@ -214,7 +216,7 @@ unstructured_inputs, structured_inputs = get_training_noise(options['batch_size'
 gan_model = tfgan.infogan_model(
     generator_fn=generator_fn,
     discriminator_fn=discriminator_fn,
-    real_data=batch_images,
+    real_data=batch_images_training,
     unstructured_generator_inputs=unstructured_inputs,
     structured_generator_inputs=structured_inputs)
 
@@ -313,14 +315,6 @@ with tf.Session(config=config) as sess:
             # finished an epoch
             epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
-
-            #Save the graph
-            cwd = os.getcwd()
-            checkpoint_dir = os.path.join(cwd+'/graphs')
-            if not os.path.exists(checkpoint_dir):
-                os.makedirs(checkpoint_dir)
-            saver = tf.train.Saver()
-            saver.save(sess,os.path.join(checkpoint_dir, timestamp +'.model'))
             
             # create some output images for the current epoch
             CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
@@ -342,7 +336,7 @@ with tf.Session(config=config) as sess:
             print(epoch_name)
             
             # define the subsequent evaluation: ... first the data
-            data_iterator = dataset.make_one_shot_iterator().get_next()
+            data_iterator = dataset_training.make_one_shot_iterator().get_next()
             real_images = data_iterator[0]
             real_targets = data_iterator[1]
 
@@ -352,37 +346,20 @@ with tf.Session(config=config) as sess:
             
             evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
-################ Perfor the new Evaluation
+################ Perform the new Evaluation
         
             #1) Latent Codes as a list and 2) Image reconstruction Error
             # get the list of latent codes produced by the generator, feeding it the according input images
             # get the reconstructed images produced by sending real image through the net and letting it reconstruct it
             # get the reconstruction error using the manhattan distance 
             # get the reconstruction error using the eucledean distance
-            listOfLatentCodes, listOfReconstructedImages =  imagesInCodesAndImagesOut(real_images)
-            counter = 0
-            imRecErrorL1_sum = 0
-            imRecErrorL2_sum = 0
-            for img1 in listOfReconstructedImages and img2 in real_images:
-                # calculate reconstruction error of images
-                #from https://stackoverflow.com/questions/189943/how-can-i-quantify-difference-between-two-images
-                img1 = to_grayscale(imread(image).astype(float))
-                img2 = to_grayscale(imread(generatedImage).astype(float))
-                dist_euclidean = sqrt(sum((img1 - img2)^2)) / img1.size
-                dist_manhattan = sum(abs(img1 - img2)) / img1.size
-                print ("Eucledian Distance: "+ dist_euclidean+ "/ per pixel: "+ dist_euclidean/ img1.size)
-                print ("Manhattan Distance: "+ dist_manhattan+ "/ per pixel: "+ dist_manhattan/ img1.size)
-        
-                counter += 1
-                imRecErrorL1_sum = imRecErrorL1_sum + dist_manhattan
-                imRecErrorL2_sum = imRecErrorL2_sum + dist_euclidean
+            
+            #listOfLatentCodes, listOfReconstructedImages =  imagesInCodesAndImagesOut(real_images)
 
-            l1 = imRecErrorL1_sum/counter
-            l2 = imRecErrorL2_sum/counter
 
-            print ("Latent Codes: " + listOfLatentCodes)
-            print ("L1: " + l1)
-            print ("L2: " + l2)
+            # print ("Latent Codes: " + listOfLatentCodes)
+            # print ("L1: " + l1)
+            # print ("L2: " + l2)
 
             #3) sample 10240 latent codes / randomly generated (with seed)
             for latCode in latCodes:
