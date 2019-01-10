@@ -154,7 +154,7 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
         continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]), tf.ones([structured_continuous_dim]))
         continuous_noise = continuous_dist.sample([batch_size])
     elif options['type_latent'] == 'n':
-        continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean = 0.0, stddev = 1.0)
+        continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean=0.0, stddev=1.0)
     else:
         raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
 
@@ -172,12 +172,12 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
     Returns:
         Unstructured noise, continuous noise numpy arrays."""
 
-    rows, cols = 20, len(continuous_sample_points)
+    rows, cols = 28, len(continuous_sample_points)
 
     # Take random draws for non-first-dim-continuous noise, making sure they are constant across columns.
     unstructured_noise = []
     for _ in xrange(rows):
-        cur_sample = np.random.normal(size=[1, noise_dims])
+        cur_sample = np.random.normal(scale=2.0, size=[1, noise_dims])
         unstructured_noise.extend([cur_sample] * cols)
     unstructured_noise = np.concatenate(unstructured_noise)
 
@@ -280,17 +280,15 @@ def imagesInCodesAndImagesOut(image_batch):
     listOfCodes = []
 
     #2. Bild durch das Netz schicken, neues generiertes Bild vergleichen
-    generatedImages= []
-    for image in image_batch:
-        with tf.variable_scope(gan_model.generator_scope, reuse=True):
-            generatedImage = (generator_fn(image, None)[0][1]).loc # [?][?]
-            #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
-        generatedImages.append(generatedImage)
-    return (listOfCodes, generatedImages)
+ 
+    with tf.variable_scope(gan_model.generator_scope, reuse=True):
+        net_with_generatedImages = generator_fn(image_batch, None)
+    return (listOfCodes, net_with_generatedImages)
 
 
 #3) Inverse / latend code reconstruction error
 def codesInCodesOut(code_batch):
+    
     return (ndarrayOfCodes)
 
 #4) 
@@ -336,14 +334,14 @@ with tf.Session(config=config) as sess:
             print(epoch_name)
             
             # define the subsequent evaluation: ... first the data
-            data_iterator = dataset_training.make_one_shot_iterator().get_next()
+            data_iterator = dataset_evaluation.make_one_shot_iterator().get_next()
             real_images = data_iterator[0]
             real_targets = data_iterator[1]
 
             # ... and now the latent code
             with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
                 latent_code = (discriminator_fn(real_images, None)[1][0]).loc           
-            
+
             evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
 ################ Perform the new Evaluation
@@ -357,20 +355,44 @@ with tf.Session(config=config) as sess:
             #listOfLatentCodes, listOfReconstructedImages =  imagesInCodesAndImagesOut(real_images)
 
 
-            # print ("Latent Codes: " + listOfLatentCodes)
-            # print ("L1: " + l1)
-            # print ("L2: " + l2)
+            #3) Reconstruction error
+            # make a random list of images from the dataset (with seed)
+            # sample 10240 latent codes with the random images
+            # generate an image with each latent code
+            # sent generated image into discriminator, take the reconstructed latent code
+            # check if the generated latent code (i.e. original) is the same as the reconstructed latent code
+            np.random.seed(45)
+            random_images = []
+            for i in range(options['batch_size']):
+                random_image = images[np.random.randint(1, length_of_data_set)]
+                random_images.append(random_image)
+                i += 1
 
-            #3) sample 10240 latent codes / randomly generated (with seed)
-            for latCode in latCodes:
-                # In codesInCodesOut: 
-                # with the latent code, generate an image (generator) - for this, constant (normal distributed) noise is needed (mean = 0)
-                # take the image as an input for the generator get a reconstructed latent code
-                #calculate recError
-                recLatCode = codesInCodesOut(LatentCode)
-                latRecError = 0 #Differnece between LatentCode and recLatCode
+            counter = 0
+            latCodes = []
+            for counter in range(10240):
+                latent_code = (discriminator_fn(random_images[counter], None)[1][0]).loc
+                with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                    generated_image = generator_fn(latent_code, g_weight_decay_gen=options['g_weight_decay_gen'])
+                    with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+                        rec_lat_code = (discriminator_fn(generated_image, None)[1][0]).loc
+                if latent_code == rec_lat_code:
+                    lat_rec_Error = 0
+                else:
+                    lat_rec_Error = 1
+                latCodes.append(latent_code, rec_lat_code, lat_rec_Error)
+                counter += 1
+                print(lat_rec_Error)
 
+
+            # dump all of this into a pickle file for later use
+            eval_outputs = {'latent_code_reconstruction': latCodes}
+            with open(os.path.join(options['output_dir'], "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
+                pickle.dump(eval_outputs, f)
+                
 ###############################################
+            
+            '''
 
             # compute all the outputs (= [latent_code, real_targets])
             table = []
@@ -451,3 +473,5 @@ with tf.Session(config=config) as sess:
 
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
+            
+            '''
