@@ -86,14 +86,18 @@ labels = np.array(list(map(lambda x: x[1:], input_data['data'])), dtype=np.float
 dimension_names = input_data['dimensions']
 length_of_data_set = len(rectangles)
 images = rectangles.reshape((-1, 28, 28, 1))
-dataset = tf.data.Dataset.from_tensor_slices((images, labels))
-dataset = dataset.shuffle(20480).repeat().batch(options['batch_size'])
+dataset_initial = tf.data.Dataset.from_tensor_slices((images, labels))
+dataset = dataset_initial.shuffle(20480).repeat().batch(options['batch_size'])
+dataset_evaluation = dataset_initial.repeat().batch(options['batch_size'])
 batch_images = dataset.make_one_shot_iterator().get_next()[0]
+# MF
+#batch_images_evaluation = dataset_evaluation.make_one_shot_iterator().get_next()[0]
+
+print(images[0][0].shape)
 
 print("Starting InfoGAN training. Here are my parameters:")
 print(options)
 print("Length of data set: {0}".format(length_of_data_set))
-
 
 # architecture of the generator network
 def infogan_generator(inputs, g_weight_decay_gen=9e-5):
@@ -260,72 +264,24 @@ def float_image_to_uint8(image):
     return tf.cast(scaled, tf.uint8)
 
 
-# --------------------------- New Evaluationfunctions ------------------------------
-
-# 1) Latent Codes as a list
-# 2) Image reconstruction Error
-def imagesInCodesAndImagesOut(image_batch):
-    # Die Vorgänge können natürlich in eine Schleife, wenn alles funktioniert, jetzt nur zur Übersicht einzen:
-
-    # 1. Eine Liste von latenten Codes (die von den Rechtecken aus unserem Datenset generiert wurden),
-    # genau so sortiert wie die Rechtecke im Datenset (d.h. erster Eintrag dieser Liste korrespondiert
-    # zum ersten Rechteck aus dem Datenset etc.)
-
-    # feed images into the generator to get the according latent codes
-    # net = gan_model.generator_scope(image_batch)
-    # listOfCodes1 =[]
-    # for image in image_batch:
-    #     with tf.variable_scope(gan_model.generator_scope, reuse=True):
-    #         latent_code = (generator_fn(image)).loc
-    #         #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
-    #     listOfCodes1.append(latent_code)
-    # oder: alle Bilder durch discriminator und encoder schicken und liste von discriminator speichern
-    # listOfCodes2 = []
-    # for image in image_batch:
-    #     with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
-    #         latent_code = (discriminator_fn(image, None)[1][0]).loc
-    #         #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
-    #     listOfCodes2.append(latent_code)
-    listOfCodes = []
-
-    # 2. Bild durch das Netz schicken, neues generiertes Bild vergleichen
-    generatedImages = []
-    for image in image_batch:
-        with tf.variable_scope(gan_model.generator_scope, reuse=True):
-            generatedImage = (generator_fn(image, None)[0][1]).loc  # [?][?]
-            # must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
-        generatedImages.append(generatedImage)
-    return (listOfCodes, generatedImages)
-
-
-# 3) Inverse / latend code reconstruction error
-def codesInCodesOut(code_batch):
-    return (ndarrayOfCodes)
-
-
-# 4)
-def samples(code_batch):
-    return (ndarrayOfImages)
-
-
-# -----------------------------------------------------------------------------
-
-
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 with tf.Session(config=config) as sess:
     # initialize all variables
     sess.run(tf.global_variables_initializer())
+
     for step in range(max_num_steps):
         # train the network
         cur_loss, _ = train_step_fn(sess, train_ops, global_step, train_step_kwargs={})
         loss_values.append((step, cur_loss))
         if step % 100 == 0:
             print('Current loss: %f' % cur_loss)
-
-        if (step + 1) in num_steps.keys():
+        # MF
+        ##if (step + 1) in num_steps.keys():
+        if(True):
             # finished an epoch
-            epoch = num_steps[step + 1]
+            ##epoch = num_steps[step + 1]
+            epoch = 1
             print("finished epoch {0}".format(epoch))
 
             # Save the graph
@@ -369,54 +325,38 @@ with tf.Session(config=config) as sess:
 
             evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
-            ################ Perfor the new Evaluation
-
-            # 1) Latent Codes as a list and 2) Image reconstruction Error
-            # get the list of latent codes produced by the generator, feeding it the according input images
-            # get the reconstructed images produced by sending real image through the net and letting it reconstruct it
-            # get the reconstruction error using the manhattan distance
-            # get the reconstruction error using the eucledean distance
-            listOfLatentCodes, listOfReconstructedImages = imagesInCodesAndImagesOut(real_images)
-            counter = 0
-            imRecErrorL1_sum = 0
-            imRecErrorL2_sum = 0
-            for img1 in listOfReconstructedImages and img2 in real_images:
-                # calculate reconstruction error of images
-                # from https://stackoverflow.com/questions/189943/how-can-i-quantify-difference-between-two-images
-                img1 = to_grayscale(imread(image).astype(float))
-                img2 = to_grayscale(imread(generatedImage).astype(float))
-                dist_euclidean = sqrt(sum((img1 - img2) ^ 2)) / img1.size
-                dist_manhattan = sum(abs(img1 - img2)) / img1.size
-                print("Eucledian Distance: " + dist_euclidean + "/ per pixel: " + dist_euclidean / img1.size)
-                print("Manhattan Distance: " + dist_manhattan + "/ per pixel: " + dist_manhattan / img1.size)
-
-                counter += 1
-                imRecErrorL1_sum = imRecErrorL1_sum + dist_manhattan
-                imRecErrorL2_sum = imRecErrorL2_sum + dist_euclidean
-
-            l1 = imRecErrorL1_sum / counter
-            l2 = imRecErrorL2_sum / counter
-
-            print("Latent Codes: " + listOfLatentCodes)
-            print("L1: " + l1)
-            print("L2: " + l2)
-
-            # 3) sample 10240 latent codes / randomly generated (with seed)
-            for latCode in latCodes:
-                # In codesInCodesOut:
-                # with the latent code, generate an image (generator) - for this, constant (normal distributed) noise is needed (mean = 0)
-                # take the image as an input for the generator get a reconstructed latent code
-                # calculate recError
-                recLatCode = codesInCodesOut(LatentCode)
-                latRecError = 0  # Differnece between LatentCode and recLatCode
-
-            ###############################################
+            # Just for testing
+            batch_images_evaluation = dataset_evaluation.make_one_shot_iterator().get_next()[0]
 
             # compute all the outputs (= [latent_code, real_targets])
             table = []
             for i in range(num_eval_steps):
                 rows = sess.run(evaluation_output)
                 table.append(rows)
+                """
+                MF: Testing if I understood batch_images_evaluation correctly
+                shape: batch_size, 28, 28, 1
+                """
+                images_eval = sess.run(batch_images_evaluation)
+
+                """
+                images_true = images[i * options['batch_size']:(i + 1) * options['batch_size']]
+                #if not(images_eval == images_true):
+                if(True):
+                    print('batch_images_evaluation')
+                    print(images_eval[0][0][:5])
+                    print(' ')
+                    print(images_true[0][0][:5])
+                """
+                images_eval_part = images_eval[0][0]
+                assert(images_eval_part.shape == images[0][0].shape)
+                print(images_eval.shape)
+                for i in range(5):
+                    print('\n')
+                print(images_eval_part)
+                for i in range(5):
+                    print('\n')
+
             table = np.concatenate(table, axis=0)
 
             # compute the ranges for each of the columns
