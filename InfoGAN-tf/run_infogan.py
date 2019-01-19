@@ -87,7 +87,7 @@ dataset = tf.data.Dataset.from_tensor_slices((images, labels))
 dataset_training = dataset.shuffle(20480).repeat().batch(options['batch_size'])
 dataset_evaluation = dataset.repeat().batch(options['batch_size'])
 batch_images_training = dataset_training.make_one_shot_iterator().get_next()[0]
-batch_images_evaluation = dataset_evaluation.make_one_shot_iterator().get_next()[0]
+# batch_images_evaluation = dataset_evaluation.make_one_shot_iterator().get_next()[0]
 
 print("Starting InfoGAN training. Here are my parameters:")
 print(options)
@@ -319,8 +319,6 @@ with tf.Session(config=config) as sess:
             epoch = 1
             print("finished epoch {0}".format(epoch))
 
-            print(sess.run(structured_inputs))
-
             # create some output images for the current epoch
             CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
             for i in range(options['latent_dims']):
@@ -341,15 +339,19 @@ with tf.Session(config=config) as sess:
             print(epoch_name)
             
             # define the subsequent evaluation: ... first the data
-            data_iterator = dataset_training.make_one_shot_iterator().get_next()
+            data_iterator = dataset_evaluation.make_one_shot_iterator().get_next()
+            # MF: Can refactor later
             real_images = data_iterator[0]
-            real_targets = data_iterator[1]
+
+            # MF: Can be deleted
+            #real_targets = data_iterator[1]
 
             # ... and now the latent code
             with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
                 latent_code = (discriminator_fn(real_images, None)[1][0]).loc           
-            
-            evaluation_output = tf.concat([latent_code, real_targets], axis=1)
+
+            # MF: Can be deleted
+            #evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
 ################ Perform the new Evaluation
         
@@ -377,6 +379,40 @@ with tf.Session(config=config) as sess:
 
 ###############################################
 
+        # MF
+        print()
+
+            """
+            Confirm iterator works as intended
+            #print(sess.run(real_images))
+            #print(sess.run(real_images)[0][0] == images[0][0])
+            """
+        """
+        # Confirm first and last batch are the same
+        # Can't be done if we let it run in the loop below, since the iterator will get called for evaluation_output
+        for i in range(num_eval_steps):
+            real = sess.run(real_images)
+            if (i == 0):
+                real = real[0][0]
+                unmod = images[0][0]
+                expected = np.all(real == unmod)
+                if not expected:
+                    print(real)
+                    print(' ')
+                    print(unmod)
+                    assert expected
+            if (i == num_eval_steps - 1):
+                real = real[-1][0]
+                unmod = images[-1][0]
+                expected = np.all(real == unmod)
+                if not expected:
+                    print(real)
+                    print(' ')
+                    print(unmod)
+                    assert expected
+            """
+
+            """
             # compute all the outputs (= [latent_code, real_targets])
             table = []
             for i in range(num_eval_steps):
@@ -456,3 +492,4 @@ with tf.Session(config=config) as sess:
 
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
+        """
