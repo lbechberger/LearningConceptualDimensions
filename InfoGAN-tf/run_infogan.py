@@ -151,7 +151,8 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
 
     # Get continuous noise Tensor.
     if options['type_latent'] == 'u':
-        continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]), tf.ones([structured_continuous_dim]))
+        I = tf.ones([structured_continuous_dim]) + 1
+        continuous_dist = ds.Uniform(-I, I)
         continuous_noise = continuous_dist.sample([batch_size])
     elif options['type_latent'] == 'n':
         continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean = 0.0, stddev = 1.0)
@@ -317,7 +318,9 @@ with tf.Session(config=config) as sess:
             #epoch = num_steps[step + 1]
             epoch = 1
             print("finished epoch {0}".format(epoch))
-            
+
+            print(sess.run(structured_inputs))
+
             # create some output images for the current epoch
             CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
             for i in range(options['latent_dims']):
