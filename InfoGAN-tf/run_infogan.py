@@ -311,8 +311,10 @@ with tf.Session(config=config) as sess:
 
             # ... and now the latent code
             with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
-                latent_code = (discriminator_fn(real_images, None)[1][0]).loc           
+                latent_code = (discriminator_fn(real_images, None)[1][0]).loc
 
+            # MF: just a dummy for the real. Chose real_images for testing purposes
+            image_tensors_from_images = real_images
             # MF: Can be deleted
             #evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
@@ -377,36 +379,44 @@ with tf.Session(config=config) as sess:
                         assert expected
                 """
 
+            # Define helper function
             def imagesInCodesAndImagesOut():
-                return sess.run()
-
-            whole_images_from_images = []
-            whole_codes_from_images = []
+                return sess.run([latent_code, image_tensors_from_images])
 
 
-            from_images = {"whole_images_from_images": (whole_images_from_images, )}
+            # list that will hold data generated from input images
+            from_images = [[], []]
 
+            # Get all the data generated from input images
             for i in range(num_eval_steps):
-                images_from_images = sess.run(real_images)
-                codes_from_images = sess.run(latent_code)
-                whole_images_from_images.append(images_from_images)
-                whole_codes_from_images.append(codes_from_images)
-            whole_images_from_images = np.concatenate(whole_images_from_images, axis=0)
+                results_from_images = imagesInCodesAndImagesOut()
+                for j in range(len(from_images)):
+                    from_images_member = from_images[j]
+                    from_images_member.append(results_from_images[j])
+                    # MF
+                    #print(len(from_images_member))
 
+                    # If we have all the results from input images, concatenate the list
+                    if(i == num_eval_steps-1):
+                        #from_images_member = np.concatenate(from_images_member, axis=0)
+                        from_images[j] = np.concatenate(from_images_member, axis=0)
+            """
+            Confirm 
+            """
+            #assert whole_images_from_images == from_images[1]
+            print(len(from_images[1]))
 
-            #Confirm dimensionality fits
+            whole_codes_from_images = from_images[0]
+            whole_images_from_images = from_images[1]
 
             """
-            #Confirm whole_images_from_images == images
+            #MF: Confirm concatenation went right
             expected = np.all(whole_images_from_images == images)
             if not expected:
-                print(whole_images_from_images[0][0])
-                for i in range(10):
-                    print(' ')
-                print(images[0][0])
+                print(len(whole_images_from_images))
                 assert expected
-            """
 
+            """
 
             """
             # compute the ranges for each of the columns
