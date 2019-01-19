@@ -252,43 +252,6 @@ def float_image_to_uint8(image):
     return tf.cast(scaled, tf.uint8)
 
 
-#--------------------------- New Evaluationfunctions ------------------------------
-
-# 1) Latent Codes as a list
-# 2) Image reconstruction Error
-def imagesInCodesAndImagesOut(image_batch):
-    # Die Vorgänge können natürlich in eine Schleife, wenn alles funktioniert, jetzt nur zur Übersicht einzen:
-
-    #1. Eine Liste von latenten Codes (die von den Rechtecken aus unserem Datenset generiert wurden), 
-    # genau so sortiert wie die Rechtecke im Datenset (d.h. erster Eintrag dieser Liste korrespondiert 
-    # zum ersten Rechteck aus dem Datenset etc.)
-
-    #feed images into the generator to get the according latent codes
-    # net = gan_model.generator_scope(image_batch)
-    # listOfCodes1 =[]
-    # for image in image_batch:
-    #     with tf.variable_scope(gan_model.generator_scope, reuse=True):
-    #         latent_code = (generator_fn(image)).loc
-    #         #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
-    #     listOfCodes1.append(latent_code)
-    #oder: alle Bilder durch discriminator und encoder schicken und liste von discriminator speichern
-    # listOfCodes2 = []
-    # for image in image_batch:
-    #     with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
-    #         latent_code = (discriminator_fn(image, None)[1][0]).loc
-    #         #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
-    #     listOfCodes2.append(latent_code)
-    listOfCodes = []
-
-    #2. Bild durch das Netz schicken, neues generiertes Bild vergleichen
-    generatedImages= []
-    for image in image_batch:
-        with tf.variable_scope(gan_model.generator_scope, reuse=True):
-            generatedImage = (generator_fn(image, None)[0][1]).loc # [?][?]
-            #must be done in the evaluate_infogan.py code, because discriminator_fn cannot be defined independent from the values for options
-        generatedImages.append(generatedImage)
-    return (listOfCodes, generatedImages)
-
 
 #3) Inverse / latend code reconstruction error
 def codesInCodesOut(code_batch):
@@ -379,47 +342,73 @@ with tf.Session(config=config) as sess:
 
 ###############################################
 
-        # MF
-        print()
+            """
+            Confirm latent_code's dim is 128, 2
+            print(sess.run(latent_code).shape)
+            """
 
             """
             Confirm iterator works as intended
             #print(sess.run(real_images))
             #print(sess.run(real_images)[0][0] == images[0][0])
             """
-        """
-        # Confirm first and last batch are the same
-        # Can't be done if we let it run in the loop below, since the iterator will get called for evaluation_output
-        for i in range(num_eval_steps):
-            real = sess.run(real_images)
-            if (i == 0):
-                real = real[0][0]
-                unmod = images[0][0]
-                expected = np.all(real == unmod)
-                if not expected:
-                    print(real)
-                    print(' ')
-                    print(unmod)
-                    assert expected
-            if (i == num_eval_steps - 1):
-                real = real[-1][0]
-                unmod = images[-1][0]
-                expected = np.all(real == unmod)
-                if not expected:
-                    print(real)
-                    print(' ')
-                    print(unmod)
-                    assert expected
             """
-
-            """
-            # compute all the outputs (= [latent_code, real_targets])
-            table = []
+            # Confirm first and last batch are the same
+            # Can't be done if we let it run in the loop below, since the iterator will get called for evaluation_output
             for i in range(num_eval_steps):
-                rows = sess.run(evaluation_output)
-                table.append(rows)
-            table = np.concatenate(table, axis=0)
+                real = sess.run(real_images)
+                if (i == 0):
+                    real = real[0][0]
+                    unmod = images[0][0]
+                    expected = np.all(real == unmod)
+                    if not expected:
+                        print(real)
+                        print(' ')
+                        print(unmod)
+                        assert expected
+                if (i == num_eval_steps - 1):
+                    real = real[-1][0]
+                    unmod = images[-1][0]
+                    expected = np.all(real == unmod)
+                    if not expected:
+                        print(real)
+                        print(' ')
+                        print(unmod)
+                        assert expected
+                """
 
+            def imagesInCodesAndImagesOut():
+                return sess.run()
+
+            whole_images_from_images = []
+            whole_codes_from_images = []
+
+
+            from_images = {"whole_images_from_images": (whole_images_from_images, )}
+
+            for i in range(num_eval_steps):
+                images_from_images = sess.run(real_images)
+                codes_from_images = sess.run(latent_code)
+                whole_images_from_images.append(images_from_images)
+                whole_codes_from_images.append(codes_from_images)
+            whole_images_from_images = np.concatenate(whole_images_from_images, axis=0)
+
+
+            #Confirm dimensionality fits
+
+            """
+            #Confirm whole_images_from_images == images
+            expected = np.all(whole_images_from_images == images)
+            if not expected:
+                print(whole_images_from_images[0][0])
+                for i in range(10):
+                    print(' ')
+                print(images[0][0])
+                assert expected
+            """
+
+
+            """
             # compute the ranges for each of the columns
             ranges = np.subtract(np.max(table, axis = 0), np.min(table, axis = 0))[:2]
             min_range = min(ranges)
