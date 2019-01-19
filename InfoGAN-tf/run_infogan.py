@@ -364,13 +364,13 @@ with tf.Session(config=config) as sess:
             # print ("L2: " + l2)
 
             #3) sample 10240 latent codes / randomly generated (with seed)
-            for latCode in latCodes:
+            #for latCode in latCodes:
                 # In codesInCodesOut: 
                 # with the latent code, generate an image (generator) - for this, constant (normal distributed) noise is needed (mean = 0)
                 # take the image as an input for the generator get a reconstructed latent code
                 #calculate recError
-                recLatCode = codesInCodesOut(LatentCode)
-                latRecError = 0 #Differnece between LatentCode and recLatCode
+                #recLatCode = codesInCodesOut(LatentCode)
+                #latRecError = 0 #Differnece between LatentCode and recLatCode
 
 ###############################################
 
