@@ -311,9 +311,11 @@ with tf.Session(config=config) as sess:
         if step % 100 == 0:
             print('Current loss: %f' % cur_loss)
 
-        if (step + 1) in num_steps.keys():
+        if(True):
+        # MF: if (step + 1) in num_steps.keys():
             # finished an epoch
-            epoch = num_steps[step + 1]
+            #epoch = num_steps[step + 1]
+            epoch = 1
             print("finished epoch {0}".format(epoch))
             
             # create some output images for the current epoch
