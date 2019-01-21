@@ -286,11 +286,18 @@ with tf.Session(config=config) as sess:
             CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
             for i in range(options['latent_dims']):
                 display_noise = get_eval_noise(options['noise_dims'], CONT_SAMPLE_POINTS, options['latent_dims'], i)
+                """
+                Confirm: display_noise is a tuple with 
+                display_noise[1].shape = [A, latent_dim] and display_noise[0].shape = [A, noise_dim]
+                """
                 with tf.variable_scope(gan_model.generator_scope, reuse=True):
                     continuous_image = gan_model.generator_fn(display_noise)
                 reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
+                # MF
+                #print(tf.shape(reshaped_continuous_image))
 
                 uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
+                print(tf.shape(uint8_continuous))
 
                 image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
                                                             tf.image.encode_png(uint8_continuous[0]))
@@ -314,7 +321,15 @@ with tf.Session(config=config) as sess:
                 latent_code = (discriminator_fn(real_images, None)[1][0]).loc
 
             # MF: just a dummy for the real. Chose real_images for testing purposes
-            image_tensors_from_images = real_images
+            #print(tf.zeros([tf.shape(latent_code)[0], options['noise_dims']]))
+
+            temp = (tf.zeros([tf.shape(latent_code)[0], options['noise_dims']]), latent_code)
+            image_tensors_from_images = generator_fn(temp)
+            # MF: I left out the num_cols argument)
+            image_tensors_from_images = tfgan.eval.image_reshaper(continuous_image)
+            image_tensors_from_images = float_image_to_uint8(reshaped_continuous_image)
+
+            #image_tensors_from_images = real_images
             # MF: Can be deleted
             #evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
@@ -390,6 +405,8 @@ with tf.Session(config=config) as sess:
             # Get all the data generated from input images
             for i in range(num_eval_steps):
                 results_from_images = imagesInCodesAndImagesOut()
+                # MF
+                assert (results_from_images[0].shape[0] == results_from_images[1].shape[0])
                 for j in range(len(from_images)):
                     from_images_member = from_images[j]
                     from_images_member.append(results_from_images[j])
@@ -400,14 +417,13 @@ with tf.Session(config=config) as sess:
                     if(i == num_eval_steps-1):
                         #from_images_member = np.concatenate(from_images_member, axis=0)
                         from_images[j] = np.concatenate(from_images_member, axis=0)
-            """
-            Confirm 
-            """
-            #assert whole_images_from_images == from_images[1]
-            print(len(from_images[1]))
 
-            whole_codes_from_images = from_images[0]
-            whole_images_from_images = from_images[1]
+            codes_from_all_images = from_images[0]
+            images_from_all_images = from_images[1]
+
+
+
+
 
             """
             #MF: Confirm concatenation went right
