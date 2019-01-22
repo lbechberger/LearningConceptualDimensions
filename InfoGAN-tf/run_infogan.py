@@ -330,18 +330,8 @@ with tf.Session(config=config) as sess:
             temp = (tf.zeros([options['batch_size'], options['noise_dims']]), latent_code)
             # MF
             image_tensors_from_images = generator_fn(temp)
-            print(image_tensors_from_images)
-            # MF: I left out the num_cols argument)
-            image_tensors_from_images = tfgan.eval.image_reshaper(continuous_image)
-            # MF
-            #print(image_tensors_from_images)
-            image_tensors_from_images = float_image_to_uint8(reshaped_continuous_image)
-            print(image_tensors_from_images.shape)
 
             #image_tensors_from_images = real_images
-            # MF: Can be deleted
-            #evaluation_output = tf.concat([latent_code, real_targets], axis=1)
-
 ################ Perform the new Evaluation
         
             #1) Latent Codes as a list and 2) Image reconstruction Error
@@ -408,11 +398,14 @@ with tf.Session(config=config) as sess:
                 return sess.run([latent_code, image_tensors_from_images])
 
 
+
+
             # list that will hold data generated from input images
             from_images = [[], []]
 
             # Get all the data generated from input images
             for i in range(num_eval_steps):
+
                 results_from_images = imagesInCodesAndImagesOut()
                 # MF
                 assert (results_from_images[0].shape[0] == results_from_images[1].shape[0])
@@ -429,6 +422,7 @@ with tf.Session(config=config) as sess:
 
             codes_from_all_images = from_images[0]
             images_from_all_images = from_images[1]
+
 
 
 
