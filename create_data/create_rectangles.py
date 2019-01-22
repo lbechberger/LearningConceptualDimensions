@@ -47,8 +47,7 @@ dataset = []
 
 def discretize(value):
     result = min(max_rectangle_size, max(min_rectangle_size, value))
-    result = round(result)
-    result = step_size * int(result/step_size)
+    result = step_size * int(round(result/step_size))
     return result
 
 drawn_factors = [args.first_dim, args.second_dim]
