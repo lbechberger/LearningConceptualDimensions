@@ -329,7 +329,8 @@ with tf.Session(config=config) as sess:
             #print(tf.shape(latent_code))
             temp = (tf.zeros([options['batch_size'], options['noise_dims']]), latent_code)
             # MF
-            image_tensors_from_images = generator_fn(temp)
+            with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                image_tensors_from_images = gan_model.generator_fn(temp)
 
             #image_tensors_from_images = real_images
 ################ Perform the new Evaluation
