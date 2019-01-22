@@ -89,6 +89,9 @@ dataset_evaluation = dataset.repeat().batch(options['batch_size'])
 batch_images_training = dataset_training.make_one_shot_iterator().get_next()[0]
 # batch_images_evaluation = dataset_evaluation.make_one_shot_iterator().get_next()[0]
 
+# MF
+print(options['batch_size'])
+
 print("Starting InfoGAN training. Here are my parameters:")
 print(options)
 print("Length of data set: {0}".format(length_of_data_set))
@@ -292,12 +295,13 @@ with tf.Session(config=config) as sess:
                 """
                 with tf.variable_scope(gan_model.generator_scope, reuse=True):
                     continuous_image = gan_model.generator_fn(display_noise)
+                print(continuous_image.shape)
                 reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
                 # MF
                 #print(tf.shape(reshaped_continuous_image))
 
                 uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
-                print(tf.shape(uint8_continuous))
+                #print(tf.shape(uint8_continuous))
 
                 image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
                                                             tf.image.encode_png(uint8_continuous[0]))
@@ -322,12 +326,17 @@ with tf.Session(config=config) as sess:
 
             # MF: just a dummy for the real. Chose real_images for testing purposes
             #print(tf.zeros([tf.shape(latent_code)[0], options['noise_dims']]))
-
-            temp = (tf.zeros([tf.shape(latent_code)[0], options['noise_dims']]), latent_code)
+            #print(tf.shape(latent_code))
+            temp = (tf.zeros([options['batch_size'], options['noise_dims']]), latent_code)
+            # MF
             image_tensors_from_images = generator_fn(temp)
+            print(image_tensors_from_images)
             # MF: I left out the num_cols argument)
             image_tensors_from_images = tfgan.eval.image_reshaper(continuous_image)
+            # MF
+            #print(image_tensors_from_images)
             image_tensors_from_images = float_image_to_uint8(reshaped_continuous_image)
+            print(image_tensors_from_images.shape)
 
             #image_tensors_from_images = real_images
             # MF: Can be deleted
