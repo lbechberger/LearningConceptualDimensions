@@ -260,17 +260,6 @@ def float_image_to_uint8(image):
     return tf.cast(scaled, tf.uint8)
 
 
-
-#3) Inverse / latend code reconstruction error
-def codesInCodesOut(code_batch):
-    return (ndarrayOfCodes)
-
-#4) 
-def samples(code_batch):
-    return (ndarrayOfImages)
-# -----------------------------------------------------------------------------
-
-
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 with tf.Session(config=config) as sess:
@@ -292,28 +281,6 @@ with tf.Session(config=config) as sess:
             if(not test):
                 epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
-
-            # create some output images for the current epoch
-            CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
-            for i in range(options['latent_dims']):
-                display_noise = get_eval_noise(options['noise_dims'], CONT_SAMPLE_POINTS, options['latent_dims'], i)
-                """
-                Confirm: display_noise is a tuple with 
-                display_noise[1].shape = [A, latent_dim] and display_noise[0].shape = [A, noise_dim]
-                """
-                with tf.variable_scope(gan_model.generator_scope, reuse=True):
-                    continuous_image = gan_model.generator_fn(display_noise)
-                print(continuous_image.shape)
-                reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image, num_cols=len(CONT_SAMPLE_POINTS))
-                # MF
-                #print(tf.shape(reshaped_continuous_image))
-
-                uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
-                #print(tf.shape(uint8_continuous))
-
-                image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
-                                                            tf.image.encode_png(uint8_continuous[0]))
-                sess.run(image_write_op)
 
             num_eval_steps = int((1.0 * length_of_data_set) / options['batch_size'])
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
