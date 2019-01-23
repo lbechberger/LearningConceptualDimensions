@@ -45,6 +45,9 @@ options['type_latent'] = 'u'
 options['weight_decay_gen'] = 2.5e-5
 options['weight_decay_dis'] = 2.5e-5
 
+# False for normal running, start if you want it to enter the evaluation phase for each epoch
+test = True
+
 # read configuration file
 config_name = sys.argv[1]
 config = RawConfigParser(options)
@@ -278,11 +281,20 @@ with tf.Session(config=config) as sess:
         if step % 100 == 0:
             print('Current loss: %f' % cur_loss)
 
-        if(True):
-        # MF: if (step + 1) in num_steps.keys():
+        print(num_steps[step + 1])
+        def get_eval_vals(t):
+            print(num_steps[step + 1])
+            eval_dict = {"epoch":num_steps[step + 1], "condition":(step + 1) in num_steps.keys()}
+            #eval_dict = {"epoch":num_steps[step + 1], "condition":(step + 1) in num_steps.keys()}
+            if (t):
+                eval_dict["epoch"] = 1
+                eval_dict["condition"] = True
+            return eval_dict
+
+        eval_vals = get_eval_vals(test)
+        if eval_vals["condition"]:
             # finished an epoch
-            #epoch = num_steps[step + 1]
-            epoch = 1
+            epoch = eval_vals["epoch"]
             print("finished epoch {0}".format(epoch))
 
             # create some output images for the current epoch
@@ -306,10 +318,6 @@ with tf.Session(config=config) as sess:
                 image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
                                                             tf.image.encode_png(uint8_continuous[0]))
                 sess.run(image_write_op)
-
-            # now evaluate the current latent codes
-            num_eval_steps = int( (1.0 * length_of_data_set) / options['batch_size'] )
-            epoch_name = "{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
             
             # define the subsequent evaluation: ... first the data
@@ -332,7 +340,41 @@ with tf.Session(config=config) as sess:
             with tf.variable_scope(gan_model.generator_scope, reuse=True):
                 image_tensors_from_images = gan_model.generator_fn(temp)
 
-            #image_tensors_from_images = real_images
+            # list that will hold data generated from input images
+            from_images = [[], []]
+
+            # Get all the data generated from input images
+            for i in range(num_eval_steps):
+
+                results_from_images = imagesInCodesAndImagesOut()
+                # MF
+                assert (results_from_images[0].shape[0] == results_from_images[1].shape[0])
+                for j in range(len(from_images)):
+                    from_images_member = from_images[j]
+                    from_images_member.append(results_from_images[j])
+                    # MF
+                    # print(len(from_images_member))
+
+                    # If we have all the results from input images, concatenate the list
+                    if (i == num_eval_steps - 1):
+                        # from_images_member = np.concatenate(from_images_member, axis=0)
+                        from_images[j] = np.concatenate(from_images_member, axis=0)
+
+            codes_from_all_images = from_images[0]
+            images_from_all_images = from_images[1]
+
+
+            def eval_shaped(a):
+                assert a.shape[0] == length_of_data_set
+                return np.reshape(a, (length_of_data_set, -1))
+
+            eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), 2)
+            assert eucl_dist_images.shape == length_of_data_set
+            avg_eucl_dist_images = np.mean(eucl_dist_images)
+            print(avg_eucl_dist_images)
+
+
+                    #image_tensors_from_images = real_images
 ################ Perform the new Evaluation
         
             #1) Latent Codes as a list and 2) Image reconstruction Error
@@ -398,31 +440,6 @@ with tf.Session(config=config) as sess:
             def imagesInCodesAndImagesOut():
                 return sess.run([latent_code, image_tensors_from_images])
 
-
-
-
-            # list that will hold data generated from input images
-            from_images = [[], []]
-
-            # Get all the data generated from input images
-            for i in range(num_eval_steps):
-
-                results_from_images = imagesInCodesAndImagesOut()
-                # MF
-                assert (results_from_images[0].shape[0] == results_from_images[1].shape[0])
-                for j in range(len(from_images)):
-                    from_images_member = from_images[j]
-                    from_images_member.append(results_from_images[j])
-                    # MF
-                    #print(len(from_images_member))
-
-                    # If we have all the results from input images, concatenate the list
-                    if(i == num_eval_steps-1):
-                        #from_images_member = np.concatenate(from_images_member, axis=0)
-                        from_images[j] = np.concatenate(from_images_member, axis=0)
-
-            codes_from_all_images = from_images[0]
-            images_from_all_images = from_images[1]
 
 
 
