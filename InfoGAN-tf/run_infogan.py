@@ -46,7 +46,7 @@ options['weight_decay_gen'] = 2.5e-5
 options['weight_decay_dis'] = 2.5e-5
 
 # False for normal running, start if you want it to enter the evaluation phase for each epoch
-test = True
+test = False
 
 # read configuration file
 config_name = sys.argv[1]
@@ -281,20 +281,14 @@ with tf.Session(config=config) as sess:
         if step % 100 == 0:
             print('Current loss: %f' % cur_loss)
 
-        print(num_steps[step + 1])
-        def get_eval_vals(t):
-            print(num_steps[step + 1])
-            eval_dict = {"epoch":num_steps[step + 1], "condition":(step + 1) in num_steps.keys()}
-            #eval_dict = {"epoch":num_steps[step + 1], "condition":(step + 1) in num_steps.keys()}
-            if (t):
-                eval_dict["epoch"] = 1
-                eval_dict["condition"] = True
-            return eval_dict
-
-        eval_vals = get_eval_vals(test)
-        if eval_vals["condition"]:
+        eval_condition = True
+        if(not test):
+            eval_condition = (step + 1) in num_steps.keys()
+        if eval_condition:
             # finished an epoch
-            epoch = eval_vals["epoch"]
+            epoch = 1
+            if(not test):
+                epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
 
             # create some output images for the current epoch
@@ -318,8 +312,11 @@ with tf.Session(config=config) as sess:
                 image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
                                                             tf.image.encode_png(uint8_continuous[0]))
                 sess.run(image_write_op)
+
+            num_eval_steps = int((1.0 * length_of_data_set) / options['batch_size'])
+            epoch_name = "{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
-            
+
             # define the subsequent evaluation: ... first the data
             data_iterator = dataset_evaluation.make_one_shot_iterator().get_next()
             # MF: Can refactor later
@@ -339,6 +336,11 @@ with tf.Session(config=config) as sess:
             # MF
             with tf.variable_scope(gan_model.generator_scope, reuse=True):
                 image_tensors_from_images = gan_model.generator_fn(temp)
+
+
+            # Define helper function
+            def imagesInCodesAndImagesOut():
+                return sess.run([latent_code, image_tensors_from_images])
 
             # list that will hold data generated from input images
             from_images = [[], []]
@@ -368,8 +370,14 @@ with tf.Session(config=config) as sess:
                 assert a.shape[0] == length_of_data_set
                 return np.reshape(a, (length_of_data_set, -1))
 
-            eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), 2)
-            assert eucl_dist_images.shape == length_of_data_set
+            eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), ord=2, axis=1)
+            expected = eucl_dist_images.shape == (length_of_data_set, )
+            if not expected:
+                print(eucl_dist_images.shape)
+                for i in range(3):
+                    print("")
+                assert expected
+
             avg_eucl_dist_images = np.mean(eucl_dist_images)
             print(avg_eucl_dist_images)
 
@@ -436,9 +444,7 @@ with tf.Session(config=config) as sess:
                         assert expected
                 """
 
-            # Define helper function
-            def imagesInCodesAndImagesOut():
-                return sess.run([latent_code, image_tensors_from_images])
+
 
 
 
