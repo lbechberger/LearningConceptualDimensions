@@ -20,7 +20,6 @@ tfgan = tf.contrib.gan
 layers = tf.contrib.layers
 ds = tf.contrib.distributions
 
-
 from six.moves import xrange
 
 from configparser import RawConfigParser
@@ -55,6 +54,28 @@ config_name = sys.argv[1]
 config = RawConfigParser(options)
 config.read("grid_search.cfg")
 
+def factorial(n):
+    """
+
+    >>> factorial(3)
+    1
+    """
+
+    import math
+    if not n >= 0:
+        raise ValueError("n must be >= 0")
+    if math.floor(n) != n:
+        raise ValueError("n must be exact integer")
+    if n+1 == n:  # catch a value like 1e300
+        raise OverflowError("n too large")
+    result = 1
+    factor = 2
+    while factor <= n:
+        result *= factor
+        factor += 1
+    return result
+
+
 def parse_range(key):
     value = options[key]
     parsed_value = ast.literal_eval(value)
@@ -62,6 +83,7 @@ def parse_range(key):
         options[key] = parsed_value
     else:
         options[key] = [parsed_value]
+
 
 # overwrite default values for options
 if config.has_section(config_name):
@@ -100,6 +122,7 @@ print(options['batch_size'])
 print("Starting InfoGAN training. Here are my parameters:")
 print(options)
 print("Length of data set: {0}".format(length_of_data_set))
+
 
 # architecture of the generator network
 def infogan_generator(inputs, weight_decay_gen=9e-5):
@@ -146,14 +169,7 @@ def infogan_discriminator(img, unused_conditioning, weight_decay_dis=9e-5, conti
 
 
 def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
-    """Get unstructured and structured noise for InfoGAN.
-    Args:
-        batch_size: The number of noise vectors to generate.
-        structured_continuous_dim: The number of dimensions of the uniform continuous noise.
-        total_continuous_noise_dims: The number of continuous noise dimensions. This number includes the structured and unstructured noise.
-    Returns:
-        A 2-tuple of structured and unstructured noise. First element is the
-        unstructured noise, and the second is the continuous structured noise."""
+    
     # Get unstructurd noise.
     unstructured_noise = tf.random_normal([batch_size, noise_dims])
 
@@ -170,16 +186,6 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
     return [unstructured_noise], [continuous_noise]
 
 def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
-    """Create noise showing impact of first dim continuous noise in InfoGAN.
-    First dimension of continuous noise is constant across columns. Other noise is
-    constant across rows.
-    Args:
-        noise_samples: Number of non-categorical noise samples to use.
-        continuous_sample_points: Possible continuous noise points to sample.
-        unstructured_noise_dims: Dimensions of the unstructured noise.
-        idx: Index of continuous dimension we want to evaluate.
-    Returns:
-        Unstructured noise, continuous noise numpy arrays."""
 
     rows, cols = 20, len(continuous_sample_points)
 
@@ -260,8 +266,11 @@ def float_image_to_uint8(image):
     return tf.cast(scaled, tf.uint8)
 
 
+
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
+
+"""
 with tf.Session(config=config) as sess:
     # initialize all variables
     sess.run(tf.global_variables_initializer())
@@ -341,157 +350,4 @@ with tf.Session(config=config) as sess:
             avg_eucl_dist_images = np.mean(eucl_dist_images)
             print(avg_eucl_dist_images)
 
-
-                    #image_tensors_from_images = real_images
-################ Perform the new Evaluation
-        
-            #1) Latent Codes as a list and 2) Image reconstruction Error
-            # get the list of latent codes produced by the generator, feeding it the according input images
-            # get the reconstructed images produced by sending real image through the net and letting it reconstruct it
-            # get the reconstruction error using the manhattan distance 
-            # get the reconstruction error using the eucledean distance
-            
-            #listOfLatentCodes, listOfReconstructedImages =  imagesInCodesAndImagesOut(real_images)
-
-
-            # print ("Latent Codes: " + listOfLatentCodes)
-            # print ("L1: " + l1)
-            # print ("L2: " + l2)
-
-            #3) sample 10240 latent codes / randomly generated (with seed)
-            #for latCode in latCodes:
-                # In codesInCodesOut: 
-                # with the latent code, generate an image (generator) - for this, constant (normal distributed) noise is needed (mean = 0)
-                # take the image as an input for the generator get a reconstructed latent code
-                #calculate recError
-                #recLatCode = codesInCodesOut(LatentCode)
-                #latRecError = 0 #Differnece between LatentCode and recLatCode
-
-###############################################
-
-            """
-            Confirm latent_code's dim is 128, 2
-            print(sess.run(latent_code).shape)
-            """
-
-            """
-            Confirm iterator works as intended
-            #print(sess.run(real_images))
-            #print(sess.run(real_images)[0][0] == images[0][0])
-            """
-            """
-            # Confirm first and last batch are the same
-            # Can't be done if we let it run in the loop below, since the iterator will get called for evaluation_output
-            for i in range(num_eval_steps):
-                real = sess.run(real_images)
-                if (i == 0):
-                    real = real[0][0]
-                    unmod = images[0][0]
-                    expected = np.all(real == unmod)
-                    if not expected:
-                        print(real)
-                        print(' ')
-                        print(unmod)
-                        assert expected
-                if (i == num_eval_steps - 1):
-                    real = real[-1][0]
-                    unmod = images[-1][0]
-                    expected = np.all(real == unmod)
-                    if not expected:
-                        print(real)
-                        print(' ')
-                        print(unmod)
-                        assert expected
-                """
-
-
-
-
-
-
-
-
-
-            """
-            #MF: Confirm concatenation went right
-            expected = np.all(whole_images_from_images == images)
-            if not expected:
-                print(len(whole_images_from_images))
-                assert expected
-
-            """
-
-            """
-            # compute the ranges for each of the columns
-            ranges = np.subtract(np.max(table, axis = 0), np.min(table, axis = 0))[:2]
-            min_range = min(ranges)
-
-            # compute correlations
-            correlations = np.corrcoef(table, rowvar=False)
-
-            output = {'n_latent' : options["latent_dims"], 'dimensions' : dimension_names, 'ranges' : ranges, 'table' : table}
-
-            # store the so-far best matching interpretable dimension
-            max_correlation_latent = [0.0]*options["latent_dims"]
-            best_name_latent_correlation = [None]*options["latent_dims"]
-
-            # iterate over all original dimensions
-            for dim_idx, dimension in enumerate(dimension_names):
-
-                # take Pearson's correlation coefficient for this dimension
-                local_correlations = correlations[options["latent_dims"] + dim_idx][:options["latent_dims"]]
-
-                output[dimension] = local_correlations
-
-                # check whether we found a better interpretation for a latent variable...
-                for latent_dim in range(options["latent_dims"]):
-                    if np.abs(local_correlations[latent_dim]) > max_correlation_latent[latent_dim]:
-                        max_correlation_latent[latent_dim] = np.abs(local_correlations[latent_dim])
-                        best_name_latent_correlation[latent_dim] = dimension
-
-            # lower bound for best correlations
-            interpretability_correlation = min(max_correlation_latent)
-            # are no two latent variables best interpreted in the same way?
-            all_different = (len(set(best_name_latent_correlation)) == options["latent_dims"])
-
-            # dump all of this into a pickle file for later use
-            with open(os.path.join(options['output_dir'], "{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
-                pickle.dump(output, f)
-
-            # some console output for debug purposes:
-            print("\nOverall correlation-based interpretability: {0}".format(interpretability_correlation))
-            print("Overall minimal range: {0}".format(min_range))
-            print("Ended up with all different dimensions: {0}".format(all_different))
-            for latent_dim in range(options["latent_dims"]):
-                print("latent_{0} (range {1}): best interpreted as '{2}' ({3})".format(latent_dim, ranges[latent_dim], best_name_latent_correlation[latent_dim], max_correlation_latent[latent_dim]))
-                for dimension in dimension_names:
-                    print("\t {0}: {1}".format(dimension, output[dimension][latent_dim]))
-
-
-            # create output file if necessary
-            file_name = os.path.join(options['output_dir'],'interpretabilities.csv')
-            if not os.path.exists(file_name):
-                with open(file_name, 'w') as f:
-                    fcntl.flock(f, fcntl.LOCK_EX)
-                    f.write("config,data_set,overall_cor,min_range,different")
-                    for latent_dim in range(options["latent_dims"]):
-                        f.write(",range-{0}".format(latent_dim))
-                        f.write(",max-cor-{0},name-cor-{0}".format(latent_dim))
-                        for dimension in dimension_names:
-                            f.write(",corr-{0}-{1}".format(dimension, latent_dim))
-                    f.write("\n")
-                    fcntl.flock(f, fcntl.LOCK_UN)
-
-            # append information to output file
-            with open(file_name, 'a') as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                f.write("{0},{1},{2},{3},{4}".format(epoch_name, "rectangles", interpretability_correlation, min_range, all_different))
-                for latent_dim in range(options["latent_dims"]):
-                    f.write(",{0}".format(ranges[latent_dim]))
-                    f.write(",{0},{1}".format(max_correlation_latent[latent_dim], best_name_latent_correlation[latent_dim]))
-                    for dimension in dimension_names:
-                        f.write(",{0}".format(output[dimension][latent_dim]))
-
-                f.write("\n")
-                fcntl.flock(f, fcntl.LOCK_UN)
-        """
+"""
