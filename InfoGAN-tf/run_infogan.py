@@ -319,13 +319,8 @@ with tf.Session(config=config) as sess:
                 # If j == 0, collect codes; if j == 1, collect output images
                 for j in range(len(from_images)):
                     from_images[j].append(results_from_images[j])
-                    # If we are at the final
-                    """
-                    if (i == num_eval_steps - 1):
-                        # from_images_member = np.concatenate(from_images_member, axis=0)
-                        from_images[j] = np.concatenate(from_images_member, axis=0)
-                    """
 
+            # lambda function that gets only used in the next 2 lines
             concat = lambda x: np.concatenate(x, axis=0)
             codes_from_all_images = concat(from_images[0])
             images_from_all_images = concat(from_images[1])
