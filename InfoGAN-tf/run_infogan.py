@@ -286,28 +286,24 @@ with tf.Session(config=config) as sess:
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
 
-            # define the subsequent evaluation: ... first the data
+            # start - part relevant to get codes and images from input images
+            # get a batch of input images
             data_iterator = dataset_evaluation.make_one_shot_iterator().get_next()
-            # MF: Can refactor later
             real_images = data_iterator[0]
-
-            # MF: Can be deleted
-            #real_targets = data_iterator[1]
 
             # ... and now the latent code
             with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
                 latent_code = (discriminator_fn(real_images, None)[1][0]).loc
 
-            # MF: just a dummy for the real. Chose real_images for testing purposes
-            #print(tf.zeros([tf.shape(latent_code)[0], options['noise_dims']]))
-            #print(tf.shape(latent_code))
+            # temp is only needed as an input to gan_model.generator_fn(temp
             temp = (tf.zeros([options['batch_size'], options['noise_dims']]), latent_code)
-            # MF
+
             with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                # get output images
                 image_tensors_from_images = gan_model.generator_fn(temp)
 
 
-            # Define helper function
+            # Define helper function to get codes and images from input images
             def imagesInCodesAndImagesOut():
                 return sess.run([latent_code, image_tensors_from_images])
 
@@ -315,24 +311,24 @@ with tf.Session(config=config) as sess:
             from_images = [[], []]
 
             # Get all the data generated from input images
+            # Each loop gets us one batch of codes and output images
             for i in range(num_eval_steps):
-
+                # get batch of codes and output images
                 results_from_images = imagesInCodesAndImagesOut()
-                # MF
                 assert (results_from_images[0].shape[0] == results_from_images[1].shape[0])
+                # If j == 0, collect codes; if j == 1, collect output images
                 for j in range(len(from_images)):
-                    from_images_member = from_images[j]
-                    from_images_member.append(results_from_images[j])
-                    # MF
-                    # print(len(from_images_member))
-
-                    # If we have all the results from input images, concatenate the list
+                    from_images[j].append(results_from_images[j])
+                    # If we are at the final
+                    """
                     if (i == num_eval_steps - 1):
                         # from_images_member = np.concatenate(from_images_member, axis=0)
                         from_images[j] = np.concatenate(from_images_member, axis=0)
+                    """
 
-            codes_from_all_images = from_images[0]
-            images_from_all_images = from_images[1]
+            concat = lambda x: np.concatenate(x, axis=0)
+            codes_from_all_images = concat(from_images[0])
+            images_from_all_images = concat(from_images[1])
 
 
             def eval_shaped(a):
