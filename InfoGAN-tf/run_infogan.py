@@ -297,50 +297,104 @@ with tf.Session(config=config) as sess:
 
             evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
-            ################ Perform the new Evaluation
 
-            #3) Reconstruction error
-            # make a random list of images from the dataset (with seed)
-            #take 10240x 10240 (=batch-size) random images from the dataset and generate 10240 latent codes with them
-            # sample 10240 latent codes with the random images
-            # generate an image with each latent code
-            # sent generated image into discriminator, take the reconstructed latent code
-            # check if the generated latent code (i.e. original) is the same as the reconstructed latent code
-            np.random.seed(45)
-            batch_of_random_images = []
-            unstructured_noise = tf.random_normal([options['batch_size'], options['noise_dims']])
-            eval_noise = np.zeros((options['batch_size'], options['noise_dims']))
+            #3) Latent Code Reconstruction error
+            
+            # generate 'noise' (i.e. a white image) to feed it into the generator with the latent code 
+            eval_noise = tf.zeros((options['batch_size'], options['noise_dims']))
 
-            for i in range(options['batch_size']):
-                random_images = []
-                for j in range(options['batch_size']):
-                    random_image = images[np.random.randint(1, length_of_data_set)]
-                    random_images.append(random_image)
-                    j += 1
-                batch_of_random_images.append(random_images)
-                i += 1
-            latCodes = []
-            for counter in range(options['batch_size']):
-                latent_code = (discriminator_fn(random_images[counter], None)[1][0]).loc
-                print (latent_code)
-                with tf.variable_scope(gan_model.generator_scope, reuse=True):
-                    generated_image = generator_fn((eval_noise, latent_code), g_weight_decay_gen=options['g_weight_decay_gen'])
-                    with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
-                        rec_lat_code = (discriminator_fn(generated_image, None)[1][0]).loc
-                #TODO: calculate lat_rec_Error_eukl and lat_rec_Error_manh
-                latCodes.append(latent_code, rec_lat_code) #, lat_recError_eukl, lat_rec_Error_manh)
+            #sample batch_size many latent codes either from a uniform or normal distribution
+            if options['type_latent'] == 'u':
+                latent_code_batch = tf.random_uniform([options['batch_size'], options['latent_dims']], minval= -options['latent_dims'], maxval= options['latent_dims'], seed = 45)
+            elif options['type_latent'] == 'n':
+                latent_code_batch = tf.random_normal([options['batch_size'], options['latent_dims']], mean=0.0, stddev=1.0, seed = 45)
+            else:
+                raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
 
+            # generate an image with the sampled latent code batch
+            # feed the generated image into the discriminator and save the reconstructed latent code
+            with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                generated_image = generator_fn((eval_noise, latent_code_batch), g_weight_decay_gen=options['g_weight_decay_gen'])
+                with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+                    rec_lat_code = (discriminator_fn(generated_image, None)[1][0]).loc
+            
+            #calculate the latent code reconstruction error
+            l1_Lat_rec_error = tf.square(tf.math.abs(rec_lat_code - latent_code_batch))
+            l2_Lat_rec_error = tf.norm(rec_lat_code - latent_code_batch, ord='euclidean')
+            print (l1_Lat_rec_error)
+            print (l2_Lat_rec_error)
+
+
+            #4) Generate 20 sequences with 20 latent codes each and change one dimension in the code (equally distributed)
+            # What have done here is a bit different to your approach, but I had problems with the task-description, 
+            # so maybe this way also works?
+            # The code does the following:
+            # 1) I generate a batch of latent codes according to type of latent (uniform or normal)
+            # 2) I iterate through each batch's line (i.e. latent codes) and change all the latent codes at dimension 1
+            # 3) Then I iterate though the batch again and change each line at dimenion 2 and keep on doing this until 
+            # I have batch size times the batch of latent codes, all with one dimension changed (always the same 
+            # dimension with the same value in a batch, but a different value (equally distributed dinstance between 
+            # values) for the next batch
+            # 4) I save each batch with one dimension changes to a specific value in a list
+            # 5) I save the list of batches all with one variable changed, but a different dimension for each batch and 
+            # changed to a different value, into another list
+            # 6) finally I save the 20 sequences of batch_size x batch_size modified latent codes into a last, big list
+
+            eval_sequences = []
+            sequences_of_lat_code_batches = []
+            for sequence in range (20):
+                all_var_of_one_batch = []
+                if options['type_latent'] == 'u':
+                    latent_code_batch = tf.random_uniform([options['batch_size'], options['latent_dims']], minval= -options['latent_dims'], maxval= options['latent_dims'], seed = 45)
+                    distance = 2*(options['latent_dims'])/ 20
+                    modified_dim = -options['latent_dims']
+                    mod_lat_code_batch = []
+                    for i in range(options['batch_size']):
+                        for j in range(options['latent_dims']):
+                            latent_code_batch[j][i].assign(modified_dim)
+                        if modified_dim + distance <= options['latent_dims']:
+                            modified_dim = modified_dim + distance
+                        else:
+                            modified_dim = -options['latent_dims']
+                        mod_lat_code_batch.append(latent_code_batch)
+                    all_var_of_one_batch.append(mod_lat_code_batch)
+
+                elif options['type_latent'] == 'n':
+                    latent_code_batch = tf.random_normal([options['batch_size'], options['latent_dims']], mean=0.0, stddev=1.0, seed = 45)
+                    distance = 2.4/ 20
+                    modified_dim = -1.2
+                    mod_lat_code_batch = []
+                    for i in range(options['batch_size']):
+                        for j in range(options['latent_dims']):
+                            latent_code_batch[j][i].assign(modified_dim)
+                        if modified_dim + distance <= 1.2:
+                            modified_dim = modified_dim + distance
+                        else:
+                            modified_dim = -1.2
+                        mod_lat_code_batch.append(latent_code_batch)
+                    all_var_of_one_batch.append(mod_lat_code_batch)
+
+                else:
+                    raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
+                sequences_of_lat_code_batches.append(all_var_of_one_batch)
+
+            # feed the latent code batches into the ga_generator und save the resulting images
+            sequences_of_gen_images = []
+            for all_var_of_lat_code_batch in sequences_of_lat_code_batches:
+                all_var_of_gen_images = []
+                for latent_code_batch in all_var_of_lat_code_batch:
+                    with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                        generated_image = generator_fn((eval_noise, latent_code_batch), g_weight_decay_gen=options['g_weight_decay_gen'])
+                    all_var_of_gen_images.append(generated_image)
+                sequences_of_gen_images.append(generated_image)
 
             # dump all of this into a pickle file for later use
-            eval_outputs = {'latent_code_reconstruction': latCodes}
+            eval_outputs = {'latent_code_reconstruction_mean_sq_error': l1_Lat_rec_error, 
+                            'latent_code_reconstruction_eukl_error': l2_Lat_rec_error, 
+                            'sequences_of_lat_code_batch_batches': sequences_of_lat_code_batches, 
+                            'sequences_of_batches_of_gen_images': sequences_of_gen_images}
             with open(os.path.join(options['output_dir'], "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
                 pickle.dump(eval_outputs, f)
-
-            #4) 
-            def samples(code_batch):
-                return (ndarrayOfImages)
-
-            ###############################################
 
             '''
 
