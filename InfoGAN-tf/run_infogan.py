@@ -44,6 +44,11 @@ options['type_latent'] = 'u'
 options['weight_decay_gen'] = 2.5e-5
 options['weight_decay_dis'] = 2.5e-5
 
+"""
+import doctest
+doctest.testmod(verbose=True)
+"""
+
 # False for normal running, start if you want it to enter the evaluation phase for each epoch
 test = False
 if(sys.argv[2] == "test"):
@@ -53,6 +58,7 @@ if(sys.argv[2] == "test"):
 config_name = sys.argv[1]
 config = RawConfigParser(options)
 config.read("grid_search.cfg")
+
 
 def factorial(n):
     """
@@ -270,17 +276,20 @@ def float_image_to_uint8(image):
 config = tf.ConfigProto()
 config.gpu_options.allow_growth = True
 
-"""
+
 with tf.Session(config=config) as sess:
     # initialize all variables
     sess.run(tf.global_variables_initializer())
     for step in range(max_num_steps):
+        #doctest: Still worked here
         # train the network
         cur_loss, _ = train_step_fn(sess, train_ops, global_step, train_step_kwargs={})
+        #doctest: Stops working here
         loss_values.append((step, cur_loss))
         if step % 100 == 0:
             print('Current loss: %f' % cur_loss)
 
+        #doctest. Does not work here
         eval_condition = True
         if(not test):
             eval_condition = (step + 1) in num_steps.keys()
