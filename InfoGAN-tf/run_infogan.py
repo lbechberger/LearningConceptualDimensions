@@ -399,6 +399,7 @@ with tf.Session(config=config) as sess:
             all_different = (len(set(best_name_latent_correlation)) == options["latent_dims"])
             '''
 
+            """
             # dump all of this into a pickle file for later use
             # with open(os.path.join(options['output_dir'], "{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
             #   pickle.dump(output, f)
@@ -444,3 +445,4 @@ with tf.Session(config=config) as sess:
 
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
+            """
