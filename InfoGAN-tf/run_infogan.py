@@ -29,6 +29,21 @@ from datetime import datetime
 
 timestamp = str(datetime.now()).replace(' ', '-')
 
+def check(expected, print_if_err):
+    """Check if expected occurs.
+
+    :param expected: true if correctly implemented
+    :param error_msg: to print if expected is false
+    :return: void
+    """
+    if not expected:
+        print(print_if_err)
+        for i in range(3):
+            print("")
+        assert expected
+
+
+
 # default values for options
 options = {}
 options['train_log_dir'] = 'logs'
@@ -44,6 +59,9 @@ options['epochs'] = '50'
 options['type_latent'] = 'u'
 options['g_weight_decay_gen'] = 2.5e-5
 options['d_weight_decay_dis'] = 2.5e-5
+
+# False for normal running, start if you want it to enter the evaluation phase for each epoch
+test = True
 
 # read configuration file
 config_name = sys.argv[1]
@@ -73,8 +91,8 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
-    options['g_weight_decay_gen'] = config.get(config_name, 'g_weight_decay_gen')
-    options['d_weight_decay_dis'] = config.get(config_name, 'd_weight_decay_dis')
+    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
+    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
 
 parse_range('epochs')
 
@@ -89,7 +107,10 @@ dataset = tf.data.Dataset.from_tensor_slices((images, labels))
 dataset_training = dataset.shuffle(20480).repeat().batch(options['batch_size'])
 dataset_evaluation = dataset.repeat().batch(options['batch_size'])
 batch_images_training = dataset_training.make_one_shot_iterator().get_next()[0]
-batch_images_evaluation = dataset_evaluation.make_one_shot_iterator().get_next()[0]
+# batch_images_evaluation = dataset_evaluation.make_one_shot_iterator().get_next()[0]
+
+# MF
+print(options['batch_size'])
 
 print("Starting InfoGAN training. Here are my parameters:")
 print(options)
@@ -156,7 +177,8 @@ def get_training_noise(batch_size, structured_continuous_dim, noise_dims):
 
     # Get continuous noise Tensor.
     if options['type_latent'] == 'u':
-        continuous_dist = ds.Uniform(-tf.ones([structured_continuous_dim]), tf.ones([structured_continuous_dim]))
+        I = tf.ones([structured_continuous_dim]) + 1
+        continuous_dist = ds.Uniform(-I, I)
         continuous_noise = continuous_dist.sample([batch_size])
     elif options['type_latent'] == 'n':
         continuous_noise = tf.random_normal([batch_size, structured_continuous_dim], mean=0.0, stddev=1.0)
@@ -286,10 +308,16 @@ with tf.Session(config=config) as sess:
         if step % 100 == 0:
             print('Current loss: %f' % cur_loss)
 
-        if (step + 1) in num_steps.keys():
+        eval_condition = True
+        if(not test):
+            eval_condition = (step + 1) in num_steps.keys()
+        if eval_condition:
             # finished an epoch
-            epoch = num_steps[step + 1]
+            epoch = 1
+            if(not test):
+                epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
+
 
             # 3) Latent Code Reconstruction error
 
@@ -336,20 +364,66 @@ with tf.Session(config=config) as sess:
                 sess.run(image_write_op)
                 '''
             # now evaluate the current latent codes
+
             num_eval_steps = int((1.0 * length_of_data_set) / options['batch_size'])
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
             print(epoch_name)
 
-            # define the subsequent evaluation: ... first the data
+            # start - part relevant to get codes and images from input images
+            # get a batch of input images
+
             data_iterator = dataset_evaluation.make_one_shot_iterator().get_next()
             real_images = data_iterator[0]
-            real_targets = data_iterator[1]
 
             # ... and now the latent code
             with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
                 latent_code = (discriminator_fn(real_images, None)[1][0]).loc
 
-            evaluation_output = tf.concat([latent_code, real_targets], axis=1)
+            # temp is only needed as an input to gan_model.generator_fn(temp
+            temp = (tf.zeros([options['batch_size'], options['noise_dims']]), latent_code)
+
+            with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                # get output images
+                image_tensors_from_images = gan_model.generator_fn(temp)
+
+
+            # Define helper function to get codes and images from input images
+            def imagesInCodesAndImagesOut():
+                return sess.run([latent_code, image_tensors_from_images])
+
+            # list that will hold data generated from input images
+            from_images = [[], []]
+
+            # Get all the data generated from input images
+            # Each loop gets us one batch of codes and output images
+            for i in range(num_eval_steps):
+                # get batch of codes and output images
+                results_from_images = imagesInCodesAndImagesOut()
+                assert (results_from_images[0].shape[0] == results_from_images[1].shape[0])
+                # If j == 0, collect codes; if j == 1, collect output images
+                for j in range(len(from_images)):
+                    from_images[j].append(results_from_images[j])
+
+            # lambda function that gets only used in the next 2 lines
+            concat = lambda x: np.concatenate(x, axis=0)
+            codes_from_all_images = concat(from_images[0])
+            images_from_all_images = concat(from_images[1])
+
+
+            def eval_shaped(a):
+                assert a.shape[0] == length_of_data_set
+                return np.reshape(a, (length_of_data_set, -1))
+
+            eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), ord=2, axis=1)
+            check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
+
+            avg_eucl_dist_images = np.mean(eucl_dist_images)
+            print(avg_eucl_dist_images)
+
+
+            #image_tensors_from_images = real_images
+
+
 
             # dump all of this into a pickle file for later use
             # eval_outputs = {'latent_code_reconstruction_mean_sq_error': l1_Lat_rec_error,
@@ -358,10 +432,24 @@ with tf.Session(config=config) as sess:
             #    pickle.dump(eval_outputs, f)
 
             ''' old evalualtion code
+            
+            evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
-            # compute all the outputs (= [latent_code, real_targets])
-            table = []
+            """
+            Confirm latent_code's dim is 128, 2
+            print(sess.run(latent_code).shape)
+            """
+
+            """
+            Confirm iterator works as intended
+            #print(sess.run(real_images))
+            #print(sess.run(real_images)[0][0] == images[0][0])
+            """
+            """
+            # Confirm first and last batch are the same
+            # Can't be done if we let it run in the loop below, since the iterator will get called for evaluation_output
             for i in range(num_eval_steps):
+
                 rows = sess.run(evaluation_output)
                 table.append(rows)
             table = np.concatenate(table, axis=0)
@@ -446,3 +534,43 @@ with tf.Session(config=config) as sess:
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
             """
+            """
+                real = sess.run(real_images)
+                if (i == 0):
+                    real = real[0][0]
+                    unmod = images[0][0]
+                    expected = np.all(real == unmod)
+                    if not expected:
+                        print(real)
+                        print(' ')
+                        print(unmod)
+                        assert expected
+                if (i == num_eval_steps - 1):
+                    real = real[-1][0]
+                    unmod = images[-1][0]
+                    expected = np.all(real == unmod)
+                    if not expected:
+                        print(real)
+                        print(' ')
+                        print(unmod)
+                        assert expected
+            """
+
+
+
+
+
+
+
+
+
+            """
+            #MF: Confirm concatenation went right
+            expected = np.all(whole_images_from_images == images)
+            if not expected:
+                print(len(whole_images_from_images))
+                assert expected
+            """
+
+
+
