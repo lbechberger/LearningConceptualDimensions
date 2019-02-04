@@ -27,6 +27,19 @@ from configparser import RawConfigParser
 
 from datetime import datetime
 
+def check(expected, print_if_err):
+    """Check if expected occurs.
+
+    :param expected: true if correctly implemented
+    :param error_msg: to print if expected is false
+    :return: void
+    """
+    if not expected:
+        print(print_if_err)
+        for i in range(3):
+            print("")
+        assert expected
+
 timestamp = str(datetime.now()).replace(' ','-')
 
 # default values for options
@@ -46,7 +59,7 @@ options['weight_decay_gen'] = 2.5e-5
 options['weight_decay_dis'] = 2.5e-5
 
 # False for normal running, start if you want it to enter the evaluation phase for each epoch
-test = False
+test = True
 
 # read configuration file
 config_name = sys.argv[1]
@@ -329,12 +342,7 @@ with tf.Session(config=config) as sess:
                 return np.reshape(a, (length_of_data_set, -1))
 
             eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), ord=2, axis=1)
-            expected = eucl_dist_images.shape == (length_of_data_set, )
-            if not expected:
-                print(eucl_dist_images.shape)
-                for i in range(3):
-                    print("")
-                assert expected
+            check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
 
             avg_eucl_dist_images = np.mean(eucl_dist_images)
             print(avg_eucl_dist_images)
@@ -416,80 +424,8 @@ with tf.Session(config=config) as sess:
             if not expected:
                 print(len(whole_images_from_images))
                 assert expected
-
             """
 
-            """
-            # compute the ranges for each of the columns
-            ranges = np.subtract(np.max(table, axis = 0), np.min(table, axis = 0))[:2]
-            min_range = min(ranges)
-
-            # compute correlations
-            correlations = np.corrcoef(table, rowvar=False)
-
-            output = {'n_latent' : options["latent_dims"], 'dimensions' : dimension_names, 'ranges' : ranges, 'table' : table}
-
-            # store the so-far best matching interpretable dimension
-            max_correlation_latent = [0.0]*options["latent_dims"]
-            best_name_latent_correlation = [None]*options["latent_dims"]
-
-            # iterate over all original dimensions
-            for dim_idx, dimension in enumerate(dimension_names):
-
-                # take Pearson's correlation coefficient for this dimension
-                local_correlations = correlations[options["latent_dims"] + dim_idx][:options["latent_dims"]]
-
-                output[dimension] = local_correlations
-
-                # check whether we found a better interpretation for a latent variable...
-                for latent_dim in range(options["latent_dims"]):
-                    if np.abs(local_correlations[latent_dim]) > max_correlation_latent[latent_dim]:
-                        max_correlation_latent[latent_dim] = np.abs(local_correlations[latent_dim])
-                        best_name_latent_correlation[latent_dim] = dimension
-
-            # lower bound for best correlations
-            interpretability_correlation = min(max_correlation_latent)
-            # are no two latent variables best interpreted in the same way?
-            all_different = (len(set(best_name_latent_correlation)) == options["latent_dims"])
-
-            # dump all of this into a pickle file for later use
-            with open(os.path.join(options['output_dir'], "{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
-                pickle.dump(output, f)
-
-            # some console output for debug purposes:
-            print("\nOverall correlation-based interpretability: {0}".format(interpretability_correlation))
-            print("Overall minimal range: {0}".format(min_range))
-            print("Ended up with all different dimensions: {0}".format(all_different))
-            for latent_dim in range(options["latent_dims"]):
-                print("latent_{0} (range {1}): best interpreted as '{2}' ({3})".format(latent_dim, ranges[latent_dim], best_name_latent_correlation[latent_dim], max_correlation_latent[latent_dim]))
-                for dimension in dimension_names:
-                    print("\t {0}: {1}".format(dimension, output[dimension][latent_dim]))
 
 
-            # create output file if necessary
-            file_name = os.path.join(options['output_dir'],'interpretabilities.csv')
-            if not os.path.exists(file_name):
-                with open(file_name, 'w') as f:
-                    fcntl.flock(f, fcntl.LOCK_EX)
-                    f.write("config,data_set,overall_cor,min_range,different")
-                    for latent_dim in range(options["latent_dims"]):
-                        f.write(",range-{0}".format(latent_dim))
-                        f.write(",max-cor-{0},name-cor-{0}".format(latent_dim))
-                        for dimension in dimension_names:
-                            f.write(",corr-{0}-{1}".format(dimension, latent_dim))
-                    f.write("\n")
-                    fcntl.flock(f, fcntl.LOCK_UN)
 
-            # append information to output file
-            with open(file_name, 'a') as f:
-                fcntl.flock(f, fcntl.LOCK_EX)
-                f.write("{0},{1},{2},{3},{4}".format(epoch_name, "rectangles", interpretability_correlation, min_range, all_different))
-                for latent_dim in range(options["latent_dims"]):
-                    f.write(",{0}".format(ranges[latent_dim]))
-                    f.write(",{0},{1}".format(max_correlation_latent[latent_dim], best_name_latent_correlation[latent_dim]))
-                    for dimension in dimension_names:
-                        f.write(",{0}".format(output[dimension][latent_dim]))
-
-                f.write("\n")
-                fcntl.flock(f, fcntl.LOCK_UN)
-        """
