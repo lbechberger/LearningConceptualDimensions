@@ -177,19 +177,24 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
         idx: Index of continuous dimension we want to evaluate.
     Returns:
         Unstructured noise, continuous noise numpy arrays."""
-
-    rows, cols = 28, len(continuous_sample_points)
+    np.random.seed(seed=45)
+    rows, cols = 20, len(continuous_sample_points)  # 20 samples, 20 punkte zw. -2 und 2
 
     # Take random draws for non-first-dim-continuous noise, making sure they are constant across columns.
     unstructured_noise = []
     for _ in xrange(rows):
-        cur_sample = np.random.normal(scale=2.0, size=[1, noise_dims])
+        cur_sample = np.zeros((1, noise_dims))
         unstructured_noise.extend([cur_sample] * cols)
     unstructured_noise = np.concatenate(unstructured_noise)
 
-    cont_noise_other_dim = []
+    cont_noise_other_dim = []  # definition inhalt anderer zeilen (nicht sample points)
     for _ in xrange(rows):
-        cur_sample = np.random.choice(continuous_sample_points, size=[1, latent_dims - 1])
+        if options['type_latent'] == 'u':
+            cur_sample = np.random.uniform(low=-2, high=2, size=[1, latent_dims - 1])
+        elif options['type_latent'] == 'n':
+            cur_sample = np.random.normal(loc=0.0, scale=1.0, size=[1, latent_dims - 1])
+        else:
+            raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
         cont_noise_other_dim.extend([cur_sample] * cols)
     cont_noise_other_dim = np.concatenate(cont_noise_other_dim)
 
@@ -211,6 +216,14 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
         continuous_noise = np.concatenate((first, cont_noise_evaluated_dim, second), 1)
 
     return unstructured_noise.astype('float32'), continuous_noise.astype('float32')
+
+
+def CodesInCodesOut(code):
+    return sess.run(code)
+
+
+def CodesInImageOut(image):
+    return sess.run(image)
 
 
 # Build the generator and discriminator.
@@ -278,23 +291,50 @@ with tf.Session(config=config) as sess:
             epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
 
-            # create some output images for the current epoch
-            CONT_SAMPLE_POINTS = np.linspace(-1.2, 1.2, 13)
+            # 3) Latent Code Reconstruction error
+
+            # generate 'noise' (i.e. a white image) to feed it into the generator with the latent code
+            eval_noise = tf.zeros((options['batch_size'], options['noise_dims']))
+
+            # sample batch_size many latent codes either from a uniform or normal distribution
+            if options['type_latent'] == 'u':
+                latent_code_batch = tf.random_uniform([options['batch_size'], options['latent_dims']], minval=-2,
+                                                      maxval=2, seed=45)
+            elif options['type_latent'] == 'n':
+                latent_code_batch = tf.random_normal([options['batch_size'], options['latent_dims']], mean=0.0,
+                                                     stddev=1.0, seed=45)
+            else:
+                raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
+
+            # prüfen ob random mit seed pro session gleiche werte ausgibt oder auch in session
+
+            # generate an image with the sampled latent code batch
+            # feed the generated image into the discriminator and save the reconstructed latent code
+            with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                generated_image = generator_fn([eval_noise, latent_code_batch])
+            with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+                rec_lat_code = (discriminator_fn(generated_image, None)[1][0]).loc
+                print(CodesInCodesOut(rec_lat_code))
+                print(CodesInCodesOut(rec_lat_code))
+
+            # 4) create some output images for the current epoch using 20 sequences of variing fixed dimension in latent code
+            CONT_SAMPLE_POINTS = np.linspace(-2, 2, 20)
             for i in range(options['latent_dims']):
                 display_noise = get_eval_noise(options['noise_dims'], CONT_SAMPLE_POINTS, options['latent_dims'], i)
                 with tf.variable_scope(gan_model.generator_scope, reuse=True):
                     continuous_image = gan_model.generator_fn(display_noise)
                 reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image,
                                                                       num_cols=len(CONT_SAMPLE_POINTS))
+                print(CodesInImageOut(reshaped_continuous_image))
+                print(CodesInImageOut(reshaped_continuous_image))
 
+                '''
                 uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
 
-                image_write_op = tf.write_file(os.path.join(options['output_dir'],
-                                                            "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch,
-                                                                                              timestamp, i)),
+                image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
                                                tf.image.encode_png(uint8_continuous[0]))
                 sess.run(image_write_op)
-
+                '''
             # now evaluate the current latent codes
             num_eval_steps = int((1.0 * length_of_data_set) / options['batch_size'])
             epoch_name = "{0}-ep{1}".format(config_name, epoch)
@@ -311,113 +351,13 @@ with tf.Session(config=config) as sess:
 
             evaluation_output = tf.concat([latent_code, real_targets], axis=1)
 
-            # 3) Latent Code Reconstruction error
-
-            # generate 'noise' (i.e. a white image) to feed it into the generator with the latent code
-            eval_noise = tf.zeros((options['batch_size'], options['noise_dims']))
-
-            # sample batch_size many latent codes either from a uniform or normal distribution
-            if options['type_latent'] == 'u':
-                latent_code_batch = tf.random_uniform([options['batch_size'], options['latent_dims']],
-                                                      minval=-options['latent_dims'], maxval=options['latent_dims'],
-                                                      seed=45)
-            elif options['type_latent'] == 'n':
-                latent_code_batch = tf.random_normal([options['batch_size'], options['latent_dims']], mean=0.0,
-                                                     stddev=1.0, seed=45)
-            else:
-                raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
-
-            # generate an image with the sampled latent code batch
-            # feed the generated image into the discriminator and save the reconstructed latent code
-            with tf.variable_scope(gan_model.generator_scope, reuse=True):
-                generated_image = generator_fn((eval_noise, latent_code_batch),
-                                               g_weight_decay_gen=options['g_weight_decay_gen'])
-                with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
-                    rec_lat_code = (discriminator_fn(generated_image, None)[1][0]).loc
-
-            # calculate the latent code reconstruction error
-            l1_Lat_rec_error = tf.square(tf.math.abs(rec_lat_code - latent_code_batch))
-            l2_Lat_rec_error = tf.norm(rec_lat_code - latent_code_batch, ord='euclidean')
-            print(l1_Lat_rec_error)
-            print(l2_Lat_rec_error)
-
-            # 4) Generate 20 sequences with 20 latent codes each and change one dimension in the code (equally distributed)
-            # What have done here is a bit different to your approach, but I had problems with the task-description,
-            # so maybe this way also works?
-            # The code does the following:
-            # 1) I generate a batch of latent codes according to type of latent (uniform or normal)
-            # 2) I iterate through each batch's line (i.e. latent codes) and change all the latent codes at dimension 1
-            # 3) Then I iterate though the batch again and change each line at dimenion 2 and keep on doing this until
-            # I have batch size times the batch of latent codes, all with one dimension changed (always the same
-            # dimension with the same value in a batch, but a different value (equally distributed dinstance between
-            # values) for the next batch
-            # 4) I save each batch with one dimension changes to a specific value in a list
-            # 5) I save the list of batches all with one variable changed, but a different dimension for each batch and
-            # changed to a different value, into another list
-            # 6) finally I save the 20 sequences of batch_size x batch_size modified latent codes into a last, big list
-
-            eval_sequences = []
-            sequences_of_lat_code_batches = []
-            for sequence in range(20):
-                all_var_of_one_batch = []
-                if options['type_latent'] == 'u':
-                    latent_code_batch = tf.random_uniform([options['batch_size'], options['latent_dims']],
-                                                          minval=-options['latent_dims'], maxval=options['latent_dims'],
-                                                          seed=45)
-                    distance = 2 * (options['latent_dims']) / 20
-                    modified_dim = -options['latent_dims']
-                    mod_lat_code_batch = []
-                    for i in range(options['batch_size']):
-                        for j in range(options['latent_dims']):
-                            latent_code_batch[j][i].assign(modified_dim)
-                        if modified_dim + distance <= options['latent_dims']:
-                            modified_dim = modified_dim + distance
-                        else:
-                            modified_dim = -options['latent_dims']
-                        mod_lat_code_batch.append(latent_code_batch)
-                    all_var_of_one_batch.append(mod_lat_code_batch)
-
-                elif options['type_latent'] == 'n':
-                    latent_code_batch = tf.random_normal([options['batch_size'], options['latent_dims']], mean=0.0,
-                                                         stddev=1.0, seed=45)
-                    distance = 2.4 / 20
-                    modified_dim = -1.2
-                    mod_lat_code_batch = []
-                    for i in range(options['batch_size']):
-                        for j in range(options['latent_dims']):
-                            latent_code_batch[j][i].assign(modified_dim)
-                        if modified_dim + distance <= 1.2:
-                            modified_dim = modified_dim + distance
-                        else:
-                            modified_dim = -1.2
-                        mod_lat_code_batch.append(latent_code_batch)
-                    all_var_of_one_batch.append(mod_lat_code_batch)
-
-                else:
-                    raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
-                sequences_of_lat_code_batches.append(all_var_of_one_batch)
-
-            # feed the latent code batches into the ga_generator und save the resulting images
-            sequences_of_gen_images = []
-            for all_var_of_lat_code_batch in sequences_of_lat_code_batches:
-                all_var_of_gen_images = []
-                for latent_code_batch in all_var_of_lat_code_batch:
-                    with tf.variable_scope(gan_model.generator_scope, reuse=True):
-                        generated_image = generator_fn((eval_noise, latent_code_batch),
-                                                       g_weight_decay_gen=options['g_weight_decay_gen'])
-                    all_var_of_gen_images.append(generated_image)
-                sequences_of_gen_images.append(generated_image)
-
             # dump all of this into a pickle file for later use
-            eval_outputs = {'latent_code_reconstruction_mean_sq_error': l1_Lat_rec_error,
-                            'latent_code_reconstruction_eukl_error': l2_Lat_rec_error,
-                            'sequences_of_lat_code_batch_batches': sequences_of_lat_code_batches,
-                            'sequences_of_batches_of_gen_images': sequences_of_gen_images}
-            with open(os.path.join(options['output_dir'],
-                                   "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
-                pickle.dump(eval_outputs, f)
+            # eval_outputs = {'latent_code_reconstruction_mean_sq_error': l1_Lat_rec_error,
+            #                'latent_code_reconstruction_eukl_error': l2_Lat_rec_error }
+            # with open(os.path.join(options['output_dir'], "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
+            #    pickle.dump(eval_outputs, f)
 
-            '''
+            ''' old evalualtion code
 
             # compute all the outputs (= [latent_code, real_targets])
             table = []
@@ -457,23 +397,27 @@ with tf.Session(config=config) as sess:
             interpretability_correlation = min(max_correlation_latent)
             # are no two latent variables best interpreted in the same way?
             all_different = (len(set(best_name_latent_correlation)) == options["latent_dims"])
+            '''
 
             # dump all of this into a pickle file for later use
-            with open(os.path.join(options['output_dir'], "{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
-                pickle.dump(output, f)
+            # with open(os.path.join(options['output_dir'], "{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
+            #   pickle.dump(output, f)
 
             # some console output for debug purposes:
             print("\nOverall correlation-based interpretability: {0}".format(interpretability_correlation))
             print("Overall minimal range: {0}".format(min_range))
             print("Ended up with all different dimensions: {0}".format(all_different))
             for latent_dim in range(options["latent_dims"]):
-                print("latent_{0} (range {1}): best interpreted as '{2}' ({3})".format(latent_dim, ranges[latent_dim], best_name_latent_correlation[latent_dim], max_correlation_latent[latent_dim]))
+                print("latent_{0} (range {1}): best interpreted as '{2}' ({3})".format(latent_dim, ranges[latent_dim],
+                                                                                       best_name_latent_correlation[
+                                                                                           latent_dim],
+                                                                                       max_correlation_latent[
+                                                                                           latent_dim]))
                 for dimension in dimension_names:
                     print("\t {0}: {1}".format(dimension, output[dimension][latent_dim]))
 
-
             # create output file if necessary
-            file_name = os.path.join(options['output_dir'],'interpretabilities.csv')
+            file_name = os.path.join(options['output_dir'], 'interpretabilities.csv')
             if not os.path.exists(file_name):
                 with open(file_name, 'w') as f:
                     fcntl.flock(f, fcntl.LOCK_EX)
@@ -489,13 +433,14 @@ with tf.Session(config=config) as sess:
             # append information to output file
             with open(file_name, 'a') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
-                f.write("{0},{1},{2},{3},{4}".format(epoch_name, "rectangles", interpretability_correlation, min_range, all_different))
+                f.write("{0},{1},{2},{3},{4}".format(epoch_name, "rectangles", interpretability_correlation, min_range,
+                                                     all_different))
                 for latent_dim in range(options["latent_dims"]):
                     f.write(",{0}".format(ranges[latent_dim]))
-                    f.write(",{0},{1}".format(max_correlation_latent[latent_dim], best_name_latent_correlation[latent_dim]))
+                    f.write(
+                        ",{0},{1}".format(max_correlation_latent[latent_dim], best_name_latent_correlation[latent_dim]))
                     for dimension in dimension_names:
                         f.write(",{0}".format(output[dimension][latent_dim]))
 
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
-            '''
