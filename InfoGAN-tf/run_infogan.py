@@ -47,8 +47,6 @@ options['weight_decay_dis'] = 2.5e-5
 
 # False for normal running, start if you want it to enter the evaluation phase for each epoch
 test = False
-if(sys.argv[2] == "test"):
-    test = True
 
 # read configuration file
 config_name = sys.argv[1]
