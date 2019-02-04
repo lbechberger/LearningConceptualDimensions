@@ -3,18 +3,21 @@ CSV
 
 """
 import numpy as np
-from sklearn.linear_model import LinearRegression
+import sklearn as sk
+import csv
+
 
 
 """
 # TO-DO: Insert appropriate arguments into fit 
-reg = LinearRegression().fit()
+
 dann einfach die euklidische Distanz berechnen und r^2 kriegt man eh mit reg.score
 """
 
-import csv
-with open('eggs.csv', 'w', newline='') as csvfile:
-    spamwriter = csv.writer(csvfile, delimiter=' ',
-                            quotechar='|', quoting=csv.QUOTE_MINIMAL)
-    spamwriter.writerow(['Spam'] * 5 + ['Baked Beans'])
-    spamwriter.writerow(['Spam', 'Lovely Spam', 'Wonderful Spam'])
+def reg_mse_and_score(inputs, labels):
+    from sklearn.linear_model import LinearRegression
+    reg = LinearRegression().fit(inputs, labels)
+    pred = reg.predict(inputs)
+    mseReg = sk.metrics.mean_squared_error(labels, pred)
+    return mseReg, reg.score(inputs, pred)
+
