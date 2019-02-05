@@ -18,15 +18,17 @@ DEF = '-'
 # Initialize to_add with DEFault value
 to_add = {}
 # TO-DO: Replace with correct categories later on
-for cat in ['f', 'o']:
+ordered_cats = ['f', 'o']
+for cat in ordered_cats:
     to_add[cat] = DEF
 
+# TO-DO: Replace with correct csv-name later on
 CSV_NAME = 'eggs.csv'
 
 # Fail-fast if csv file does not exist or first line unequal to to_add.keys()
 with open(CSV_NAME, 'r', newline='') as csvfile:
     if not (
-            to_add.keys()
+            ordered_cats
             == next(csv.reader(csvfile))):
         raise ValueError("CSVFile's first line unequal config/metric-names")    
 
