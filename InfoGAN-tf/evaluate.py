@@ -2,6 +2,15 @@ import numpy as np
 import sklearn as sk
 import csv
 
+def load_np_pickle(ind):
+    import pickle
+    import sys
+    pickle.load(open(sys.argv[ind], 'rb'), encoding='latin1')
+
+input_data = load_np_pickle(0)
+evaluation_data = load_np_pickle(1)
+
+
 # TO-DO: Replace value later on
 config_name = 'foo'
 
@@ -12,17 +21,26 @@ to_add = {}
 for cat in ['f', 'o']:
     to_add[cat] = DEF
 
-"""
-csv_name = 'eggs.csv'
-# Fail-fast if csv file does not exist or first line unequal to cats
-with open(csv_name, 'r', newline='') as csvfile:
+CSV_NAME = 'eggs.csv'
+
+# Fail-fast if csv file does not exist or first line unequal to to_add.keys()
+with open(CSV_NAME, 'r', newline='') as csvfile:
     if not (
-            categories
+            to_add.keys()
             == next(csv.reader(csvfile))):
         raise ValueError("CSVFile's first line unequal config/metric-names")    
-"""
+
 
 def reg_mse_and_score(inputs, labels):
+    """
+
+    :param inputs
+    :param labels
+    :return: mse and r^2 coefficient between the labels and predicted values based on the inputs
+    """
+    if not len(inputs) == labels(inputs):
+        raise ValueError
+
     from sklearn.linear_model import LinearRegression
     reg = LinearRegression().fit(inputs, labels)
     pred = reg.predict(inputs)
@@ -31,6 +49,7 @@ def reg_mse_and_score(inputs, labels):
 
 def add_to_csv(ordered_cats, csv_name, to_add):
     """
+    adds to_add to csv with csvname. If values for a category are missing, '-' will be added
 
     :param ordered_cats: category names in the correct order
     :param csv_name: csv file's name
