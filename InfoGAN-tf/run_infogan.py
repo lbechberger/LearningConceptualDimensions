@@ -91,8 +91,8 @@ if config.has_section(config_name):
     options['lambda'] = config.getfloat(config_name, 'lambda')
     options['epochs'] = config.get(config_name, 'epochs')
     options['type_latent'] = config.get(config_name, 'type_latent')
-    options['weight_decay_gen'] = config.get(config_name, 'weight_decay_gen')
-    options['weight_decay_dis'] = config.get(config_name, 'weight_decay_dis')
+    options['g_weight_decay_gen'] = config.get(config_name, 'g_weight_decay_gen')
+    options['d_weight_decay_dis'] = config.get(config_name, 'd_weight_decay_dis')
 
 parse_range('epochs')
 
@@ -200,7 +200,7 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
     Returns:
         Unstructured noise, continuous noise numpy arrays."""
     np.random.seed(seed=45)
-    rows, cols = 20, len(continuous_sample_points)  # 20 samples, 20 punkte zw. -2 und 2
+    rows, cols = 20, len(continuous_sample_points) 
 
     # Take random draws for non-first-dim-continuous noise, making sure they are constant across columns.
     unstructured_noise = []
@@ -209,7 +209,7 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
         unstructured_noise.extend([cur_sample] * cols)
     unstructured_noise = np.concatenate(unstructured_noise)
 
-    cont_noise_other_dim = []  # definition inhalt anderer zeilen (nicht sample points)
+    cont_noise_other_dim = []
     for _ in xrange(rows):
         if options['type_latent'] == 'u':
             cur_sample = np.random.uniform(low=-2, high=2, size=[1, latent_dims - 1])
@@ -318,6 +318,22 @@ with tf.Session(config=config) as sess:
                 epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
 
+            # now evaluate the current latent codes
+
+            num_eval_steps = int((1.0 * length_of_data_set) / options['batch_size'])
+            epoch_name = "{0}-ep{1}".format(config_name, epoch)
+            print(epoch_name)
+
+            # start - part relevant to get codes and images from input images
+            # get a batch of input images
+
+            data_iterator = dataset_evaluation.make_one_shot_iterator().get_next()
+            real_images = data_iterator[0]
+
+            # ... and now the latent code
+            with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
+                latent_code = (discriminator_fn(real_images, None)[1][0]).loc
+
 
             # 3) Latent Code Reconstruction error
 
@@ -342,8 +358,12 @@ with tf.Session(config=config) as sess:
                 generated_image = generator_fn([eval_noise, latent_code_batch])
             with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
                 rec_lat_code = (discriminator_fn(generated_image, None)[1][0]).loc
-                print(CodesInCodesOut(rec_lat_code))
-                print(CodesInCodesOut(rec_lat_code))
+                
+            codesInCodesOut = CodesInCodesOut(rec_lat_code)
+            print(codesInCodesOut)
+                      
+                # eucl_dist_latCode = np.linalg.norm((latent_code_batch - rec_lat_code), ord=2, axis=1)
+                # check(eucl_dist_latCode.shape == (options['batch_size'], ), eucl_dist_latCode.shape)
 
             # 4) create some output images for the current epoch using 20 sequences of variing fixed dimension in latent code
             CONT_SAMPLE_POINTS = np.linspace(-2, 2, 20)
@@ -353,31 +373,16 @@ with tf.Session(config=config) as sess:
                     continuous_image = gan_model.generator_fn(display_noise)
                 reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image,
                                                                       num_cols=len(CONT_SAMPLE_POINTS))
-                print(CodesInImageOut(reshaped_continuous_image))
-                print(CodesInImageOut(reshaped_continuous_image))
+            codeInImOut = CodesInImageOut(reshaped_continuous_image)
+            print(codeInImOut)
 
-                '''
-                uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
+            '''
+            uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
 
-                image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
+            image_write_op = tf.write_file(os.path.join(options['output_dir'], "{0}-ep{1}-{2}_dim{3}.png".format(config_name, epoch, timestamp, i)),
                                                tf.image.encode_png(uint8_continuous[0]))
-                sess.run(image_write_op)
-                '''
-            # now evaluate the current latent codes
-
-            num_eval_steps = int((1.0 * length_of_data_set) / options['batch_size'])
-            epoch_name = "{0}-ep{1}".format(config_name, epoch)
-            print(epoch_name)
-
-            # start - part relevant to get codes and images from input images
-            # get a batch of input images
-
-            data_iterator = dataset_evaluation.make_one_shot_iterator().get_next()
-            real_images = data_iterator[0]
-
-            # ... and now the latent code
-            with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
-                latent_code = (discriminator_fn(real_images, None)[1][0]).loc
+            sess.run(image_write_op)
+            '''
 
             # temp is only needed as an input to gan_model.generator_fn(temp
             temp = (tf.zeros([options['batch_size'], options['noise_dims']]), latent_code)
@@ -410,15 +415,15 @@ with tf.Session(config=config) as sess:
             images_from_all_images = concat(from_images[1])
 
 
-            def eval_shaped(a):
-                assert a.shape[0] == length_of_data_set
-                return np.reshape(a, (length_of_data_set, -1))
-
-            eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), ord=2, axis=1)
-            check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
-
-            avg_eucl_dist_images = np.mean(eucl_dist_images)
-            print(avg_eucl_dist_images)
+            # def eval_shaped(a):
+            #     assert a.shape[0] == length_of_data_set
+            #     return np.reshape(a, (length_of_data_set, -1))
+            # 
+            # eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), ord=2, axis=1)
+            # check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
+            # 
+            # avg_eucl_dist_images = np.mean(eucl_dist_images)
+            # print(avg_eucl_dist_images)
 
 
             #image_tensors_from_images = real_images
