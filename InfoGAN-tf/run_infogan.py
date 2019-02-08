@@ -358,12 +358,12 @@ with tf.Session(config=config) as sess:
                 generated_image = generator_fn([eval_noise, latent_code_batch])
             with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
                 rec_lat_code = (discriminator_fn(generated_image, None)[1][0]).loc
-                
-            codesInCodesOut = CodesInCodesOut(rec_lat_code)
-            print(codesInCodesOut)
-                      
-                # eucl_dist_latCode = np.linalg.norm((latent_code_batch - rec_lat_code), ord=2, axis=1)
-                # check(eucl_dist_latCode.shape == (options['batch_size'], ), eucl_dist_latCode.shape)
+
+            reconstructed_latCode = CodesInCodesOut(rec_lat_code)
+            l1_recLC_error = 1 #calculate manh. distance between reconstructed_latCode and latent_code_batch
+            l2_recLC_error = 1 #calculate eukl. distance between reconstructed_latCode and latent_code_batch
+
+
 
             # 4) create some output images for the current epoch using 20 sequences of variing fixed dimension in latent code
             CONT_SAMPLE_POINTS = np.linspace(-2, 2, 20)
@@ -374,7 +374,6 @@ with tf.Session(config=config) as sess:
                 reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image,
                                                                       num_cols=len(CONT_SAMPLE_POINTS))
             codeInImOut = CodesInImageOut(reshaped_continuous_image)
-            print(codeInImOut)
 
             '''
             uint8_continuous = float_image_to_uint8(reshaped_continuous_image)
@@ -415,26 +414,28 @@ with tf.Session(config=config) as sess:
             images_from_all_images = concat(from_images[1])
 
 
-            # def eval_shaped(a):
-            #     assert a.shape[0] == length_of_data_set
-            #     return np.reshape(a, (length_of_data_set, -1))
-            # 
-            # eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), ord=2, axis=1)
-            # check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
-            # 
-            # avg_eucl_dist_images = np.mean(eucl_dist_images)
-            # print(avg_eucl_dist_images)
+            def eval_shaped(a):
+                assert a.shape[0] == length_of_data_set
+                return np.reshape(a, (length_of_data_set, -1))
+
+            eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), ord=2, axis=1)
+            check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
+
+            avg_eucl_dist_images = np.mean(eucl_dist_images)
+            print(avg_eucl_dist_images)
 
 
             #image_tensors_from_images = real_images
 
 
 
-            # dump all of this into a pickle file for later use
-            # eval_outputs = {'latent_code_reconstruction_mean_sq_error': l1_Lat_rec_error,
-            #                'latent_code_reconstruction_eukl_error': l2_Lat_rec_error }
-            # with open(os.path.join(options['output_dir'], "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
-            #    pickle.dump(eval_outputs, f)
+            #dump all of this into a pickle file for later use
+            eval_outputs = {'l1_LatCode_rec_error': l1_recLC_error,
+                            'l2_latCode_rec_error': l2_recLC_error,
+                            'output_images_variing_lat_code': codeInImOut,
+                            'l2_recIm_error': avg_eucl_dist_images }
+            with open(os.path.join(options['output_dir'], "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
+               pickle.dump(eval_outputs, f)
 
             ''' old evalualtion code
             
@@ -492,11 +493,7 @@ with tf.Session(config=config) as sess:
             all_different = (len(set(best_name_latent_correlation)) == options["latent_dims"])
             '''
 
-            """
-            # dump all of this into a pickle file for later use
-            # with open(os.path.join(options['output_dir'], "{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
-            #   pickle.dump(output, f)
-
+            
             # some console output for debug purposes:
             print("\nOverall correlation-based interpretability: {0}".format(interpretability_correlation))
             print("Overall minimal range: {0}".format(min_range))
@@ -509,7 +506,8 @@ with tf.Session(config=config) as sess:
                                                                                            latent_dim]))
                 for dimension in dimension_names:
                     print("\t {0}: {1}".format(dimension, output[dimension][latent_dim]))
-
+            
+            """
             # create output file if necessary
             file_name = os.path.join(options['output_dir'], 'interpretabilities.csv')
             if not os.path.exists(file_name):
@@ -523,7 +521,8 @@ with tf.Session(config=config) as sess:
                             f.write(",corr-{0}-{1}".format(dimension, latent_dim))
                     f.write("\n")
                     fcntl.flock(f, fcntl.LOCK_UN)
-
+            
+            
             # append information to output file
             with open(file_name, 'a') as f:
                 fcntl.flock(f, fcntl.LOCK_EX)
@@ -539,6 +538,7 @@ with tf.Session(config=config) as sess:
                 f.write("\n")
                 fcntl.flock(f, fcntl.LOCK_UN)
             """
+
             """
                 real = sess.run(real_images)
                 if (i == 0):
@@ -560,14 +560,6 @@ with tf.Session(config=config) as sess:
                         print(unmod)
                         assert expected
             """
-
-
-
-
-
-
-
-
 
             """
             #MF: Confirm concatenation went right
