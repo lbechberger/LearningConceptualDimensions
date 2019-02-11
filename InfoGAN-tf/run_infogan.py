@@ -61,7 +61,7 @@ options['g_weight_decay_gen'] = 2.5e-5
 options['d_weight_decay_dis'] = 2.5e-5
 
 # False for normal running, start if you want it to enter the evaluation phase for each epoch
-test = True
+test = False
 
 # read configuration file
 config_name = sys.argv[1]
@@ -334,11 +334,57 @@ with tf.Session(config=config) as sess:
             with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
                 latent_code = (discriminator_fn(real_images, None)[1][0]).loc
 
-
-            # 3) Latent Code Reconstruction error
-
             # generate 'noise' (i.e. a white image) to feed it into the generator with the latent code
             eval_noise = tf.zeros((options['batch_size'], options['noise_dims']))
+
+            #2) Image reconstruction Error
+
+            # temp is only needed as an input to gan_model.generator_fn(temp
+            temp = (eval_noise, latent_code)
+
+            with tf.variable_scope(gan_model.generator_scope, reuse=True):
+                # get output images
+                image_tensors_from_images = gan_model.generator_fn(temp)
+
+
+            # Define helper function to get codes and images from input images
+            def imagesInCodesAndImagesOut():
+                return sess.run([latent_code, image_tensors_from_images])
+
+            # list that will hold data generated from input images
+            from_images = [[], []]
+
+            # Get all the data generated from input images
+            # Each loop gets us one batch of codes and output images
+            for i in range(num_eval_steps):
+                # get batch of codes and output images
+                results_from_images = imagesInCodesAndImagesOut()
+                assert (results_from_images[0].shape[0] == results_from_images[1].shape[0])
+                # If j == 0, collect codes; if j == 1, collect output images
+                for j in range(len(from_images)):
+                    from_images[j].append(results_from_images[j])
+
+            # lambda function that gets only used in the next 2 lines
+            concat = lambda x: np.concatenate(x, axis=0)
+            codes_from_all_images = concat(from_images[0])
+            images_from_all_images = concat(from_images[1])
+
+
+            # def eval_shaped(a):
+            #     assert a.shape[0] == length_of_data_set
+            #     return np.reshape(a, (length_of_data_set, -1))
+            # 
+            # eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), ord=2, axis=1)
+            # check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
+            # 
+            # avg_eucl_dist_images = np.mean(eucl_dist_images)
+            # print(avg_eucl_dist_images)
+
+
+            #image_tensors_from_images = real_images
+            
+            
+            # 3) Latent Code Reconstruction error
 
             # sample batch_size many latent codes either from a uniform or normal distribution
             if options['type_latent'] == 'u':
@@ -383,57 +429,13 @@ with tf.Session(config=config) as sess:
             sess.run(image_write_op)
             '''
 
-            # temp is only needed as an input to gan_model.generator_fn(temp
-            temp = (tf.zeros([options['batch_size'], options['noise_dims']]), latent_code)
-
-            with tf.variable_scope(gan_model.generator_scope, reuse=True):
-                # get output images
-                image_tensors_from_images = gan_model.generator_fn(temp)
-
-
-            # Define helper function to get codes and images from input images
-            def imagesInCodesAndImagesOut():
-                return sess.run([latent_code, image_tensors_from_images])
-
-            # list that will hold data generated from input images
-            from_images = [[], []]
-
-            # Get all the data generated from input images
-            # Each loop gets us one batch of codes and output images
-            for i in range(num_eval_steps):
-                # get batch of codes and output images
-                results_from_images = imagesInCodesAndImagesOut()
-                assert (results_from_images[0].shape[0] == results_from_images[1].shape[0])
-                # If j == 0, collect codes; if j == 1, collect output images
-                for j in range(len(from_images)):
-                    from_images[j].append(results_from_images[j])
-
-            # lambda function that gets only used in the next 2 lines
-            concat = lambda x: np.concatenate(x, axis=0)
-            codes_from_all_images = concat(from_images[0])
-            images_from_all_images = concat(from_images[1])
-
-
-            def eval_shaped(a):
-                assert a.shape[0] == length_of_data_set
-                return np.reshape(a, (length_of_data_set, -1))
-
-            eucl_dist_images = np.linalg.norm(eval_shaped(images_from_all_images) - eval_shaped(images), ord=2, axis=1)
-            check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
-
-            avg_eucl_dist_images = np.mean(eucl_dist_images)
-            print(avg_eucl_dist_images)
-
-
-            #image_tensors_from_images = real_images
-
-
-
-            #dump all of this into a pickle file for later use
-            eval_outputs = {'l1_LatCode_rec_error': l1_recLC_error,
-                            'l2_latCode_rec_error': l2_recLC_error,
-                            'output_images_variing_lat_code': codeInImOut,
-                            'l2_recIm_error': avg_eucl_dist_images }
+            #dump all of this into a pickle file for later use --'l2_recIm_error': avg_eucl_dist_images,
+            eval_outputs = {'codes_from_all_images': codes_from_all_images,
+                            'images_from_all_images': images_from_all_images,
+                            'reconstructed_latCode': reconstructed_latCode,
+                            #'l1_LatCode_rec_error': l1_recLC_error,
+                            #'l2_latCode_rec_error': l2_recLC_error,
+                            'output_images_variing_lat_code': codeInImOut}
             with open(os.path.join(options['output_dir'], "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
                pickle.dump(eval_outputs, f)
 
@@ -495,18 +497,18 @@ with tf.Session(config=config) as sess:
 
             
             # some console output for debug purposes:
-            print("\nOverall correlation-based interpretability: {0}".format(interpretability_correlation))
-            print("Overall minimal range: {0}".format(min_range))
-            print("Ended up with all different dimensions: {0}".format(all_different))
-            for latent_dim in range(options["latent_dims"]):
-                print("latent_{0} (range {1}): best interpreted as '{2}' ({3})".format(latent_dim, ranges[latent_dim],
-                                                                                       best_name_latent_correlation[
-                                                                                           latent_dim],
-                                                                                       max_correlation_latent[
-                                                                                           latent_dim]))
-                for dimension in dimension_names:
-                    print("\t {0}: {1}".format(dimension, output[dimension][latent_dim]))
-            
+            # print("\nOverall correlation-based interpretability: {0}".format(interpretability_correlation))
+            # print("Overall minimal range: {0}".format(min_range))
+            # print("Ended up with all different dimensions: {0}".format(all_different))
+            # for latent_dim in range(options["latent_dims"]):
+            #     print("latent_{0} (range {1}): best interpreted as '{2}' ({3})".format(latent_dim, ranges[latent_dim],
+            #                                                                            best_name_latent_correlation[
+            #                                                                                latent_dim],
+            #                                                                            max_correlation_latent[
+            #                                                                                latent_dim]))
+            #     for dimension in dimension_names:
+            #         print("\t {0}: {1}".format(dimension, output[dimension][latent_dim]))
+            # 
             """
             # create output file if necessary
             file_name = os.path.join(options['output_dir'], 'interpretabilities.csv')
