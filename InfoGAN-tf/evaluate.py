@@ -64,20 +64,15 @@ def add_to_csv(ordered_cats, csv_name, to_add):
                 to_add[cat] = '-'
         csv.writer(csvfile).writerow([to_add[cat] for cat in ordered_cats])
 
-def update_dict(cats, dict, key, val):
+def update_to_add(key, val):
     """
-    Only allows val to be added to dict[key] if key is one of the categories in cats.
+    Only allows val to be added to tp_add[key] if key is one of the categories in ORDERED_CATS.
+    Use this function whenever you want to use "to_add[someKey] = someVal"
 
-    :param cats: the categories
-    :param dict:
     :param key:
     :param val:
     :return:
     """
-    if(key not in cats):
+    if(key not in ORDERED_CATS):
         raise ValueError("IllegalKey")
-    dict[key] = val
-
-# wrapper function for update_dict, since update_dict's arguments "ordered_cats" and "dict"
-# stay constant in this script
-update_to_add = lambda key, val: update_dict(ORDERED_CATS, to_add, key, val)
+    to_add[key] = val
