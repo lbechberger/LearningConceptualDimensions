@@ -418,7 +418,7 @@ with tf.Session(config=config) as sess:
             check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
 
             avg_eucl_dist_images = np.mean(eucl_dist_images)
-            print(avg_eucl_dist_images)
+
 
 
             #image_tensors_from_images = real_images
