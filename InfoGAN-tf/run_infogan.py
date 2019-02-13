@@ -62,7 +62,7 @@ options['g_weight_decay_gen'] = 2.5e-5
 options['d_weight_decay_dis'] = 2.5e-5
 
 # False for normal running, start if you want it to enter the evaluation phase for each epoch
-test = True
+test = False
 
 # read configuration file
 config_name = sys.argv[1]
@@ -356,8 +356,6 @@ with tf.Session(config=config) as sess:
             # sample batch_size many latent codes either from a uniform or normal distribution
             latent_code_batch = tf.placeholder(tf.float32, CODEBATCHSHP)
 
-            # prüfen ob random mit seed pro session gleiche werte ausgibt oder auch in session
-
             # generate an image with the sampled latent code batch
             # feed the generated image into the discriminator and save the reconstructed latent code
             with tf.variable_scope(gan_model.generator_scope, reuse=True):
@@ -460,7 +458,7 @@ with tf.Session(config=config) as sess:
 
             print(codeInImOut.shape)
 
-            #dump all of this into a pickle file for later use --'l2_recIm_error': avg_eucl_dist_images,
+            #dump all of this into a pickle file for later use
             eval_outputs = {'codes_from_images': codes_from_images,
                             'avg_manh_dist_images': avg_manh_dist_images,
                             'avg_eucl_dist_images': avg_eucl_dist_images,
