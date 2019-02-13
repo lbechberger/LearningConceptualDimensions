@@ -245,8 +245,8 @@ def codesInCodesOut(lat_code_batch):
     return sess.run(rec_lat_code, {latent_code_batch:lat_code_batch})
 
 
-def CodesInImageOut(image):
-    return sess.run(image)
+def CodesInImageOut():
+    return sess.run(reshaped_continuous_image)
 
 
 # Build the generator and discriminator.
@@ -448,16 +448,6 @@ with tf.Session(config=config) as sess:
             avg_manh_dist_codes = get_avg_dist_codes(MANH)
             avg_eucl_dist_codes = get_avg_dist_codes(EUCL)
 
-
-
-            # TO-DO: remove this later on
-            print(avg_eucl_dist_images)
-            #reconstructed_latCode = codesInCodesOut()
-            l1_recLC_error = 1 #calculate manh. distance between reconstructed_latCode and latent_code_batch
-            l2_recLC_error = 1 #calculate eukl. distance between reconstructed_latCode and latent_code_batch
-
-
-
             # 4) create some output images for the current epoch using 20 sequences of variing fixed dimension in latent code
             CONT_SAMPLE_POINTS = np.linspace(-2, 2, 20)
             for i in range(options['latent_dims']):
@@ -466,13 +456,16 @@ with tf.Session(config=config) as sess:
                     continuous_image = gan_model.generator_fn(display_noise)
                 reshaped_continuous_image = tfgan.eval.image_reshaper(continuous_image,
                                                                       num_cols=len(CONT_SAMPLE_POINTS))
-            codeInImOut = CodesInImageOut(reshaped_continuous_image)
+            codeInImOut = CodesInImageOut()
 
+            print(codeInImOut.shape)
 
             #dump all of this into a pickle file for later use --'l2_recIm_error': avg_eucl_dist_images,
-            eval_outputs = {'codes_from_all_images': codes_from_images,
-                            #'l1_LatCode_rec_error': l1_recLC_error,
-                            #'l2_latCode_rec_error': l2_recLC_error,
+            eval_outputs = {'codes_from_images': codes_from_images,
+                            'avg_manh_dist_images': avg_manh_dist_images,
+                            'avg_eucl_dist_images': avg_eucl_dist_images,
+                            'avg_manh_dist_codes': avg_manh_dist_codes,
+                            'avg_eucl_dist_codes': avg_eucl_dist_codes,
                             'output_images_variing_lat_code': codeInImOut}
             with open(os.path.join(options['output_dir'], "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
                pickle.dump(eval_outputs, f)
