@@ -40,6 +40,7 @@ def check(expected, print_if_err):
         print(print_if_err)
         for i in range(3):
             print("")
+        print(print_if_err)
         assert expected
 
 
@@ -102,8 +103,8 @@ rectangles = np.array(list(map(lambda x: x[0], input_data['data'])), dtype=np.fl
 labels = np.array(list(map(lambda x: x[1:], input_data['data'])), dtype=np.float32)
 dimension_names = input_data['dimensions']
 length_of_data_set = len(rectangles)
-images = rectangles.reshape((-1, 28, 28, 1))
-dataset = tf.data.Dataset.from_tensor_slices((images, labels))
+inp_images = rectangles.reshape((-1, 28, 28, 1))
+dataset = tf.data.Dataset.from_tensor_slices((inp_images, labels))
 dataset_training = dataset.shuffle(20480).repeat().batch(options['batch_size'])
 dataset_evaluation = dataset.repeat().batch(options['batch_size'])
 batch_images_training = dataset_training.make_one_shot_iterator().get_next()[0]
@@ -240,8 +241,8 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
     return unstructured_noise.astype('float32'), continuous_noise.astype('float32')
 
 
-def codesInCodesOut():
-    return sess.run(rec_lat_code)
+def codesInCodesOut(lat_code_batch):
+    return sess.run(rec_lat_code, {latent_code_batch:lat_code_batch})
 
 
 def CodesInImageOut(image):
@@ -349,17 +350,11 @@ with tf.Session(config=config) as sess:
 
 
             
-            # 3) Latent Code Reconstruction error
+            # 3) Get reconstructed latent code
+            CODEBATCHSHP = [options['batch_size'], options['latent_dims']]
 
             # sample batch_size many latent codes either from a uniform or normal distribution
-            if options['type_latent'] == 'u':
-                latent_code_batch = tf.random_uniform([options['batch_size'], options['latent_dims']], minval=-2,
-                                                      maxval=2, seed=45)
-            elif options['type_latent'] == 'n':
-                latent_code_batch = tf.random_normal([options['batch_size'], options['latent_dims']], mean=0.0,
-                                                     stddev=1.0, seed=45)
-            else:
-                raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
+            latent_code_batch = tf.placeholder(tf.float32, CODEBATCHSHP)
 
             # prüfen ob random mit seed pro session gleiche werte ausgibt oder auch in session
 
@@ -370,26 +365,58 @@ with tf.Session(config=config) as sess:
             with tf.variable_scope(gan_model.discriminator_scope, reuse=True):
                 rec_lat_code = (discriminator_fn(generated_image, None)[1][0]).loc
 
-            # list that will hold data generated from input images
+
+                # Part of assertion if codesInCodesOut works as intended
+                def get_input_code_batch(seed):
+                    lat_code_batch = None
+                    np.random.seed(seed)
+                    if options['type_latent'] == 'u':
+                        lat_code_batch = np.random.uniform(low=-2, high=2, size=CODEBATCHSHP)
+                    elif options['type_latent'] == 'n':
+                        lat_code_batch = np.random.normal(size=CODEBATCHSHP)
+                    else:
+                        raise Exception("Unknown type of latent distribution: {0}".format(options['type_latent']))
+                    return lat_code_batch
+
+            # list that will store the input codes
+            inp_codes = []
+            # lists that will hold generated data
             from_images = [[], []]
             codes_from_codes = []
 
+
+            prev_code_batch = 1
             # Each loop gets us one batch of codes and output images from images, as well as codes from codes
             for i in range(num_eval_steps):
                 # get batch of codes and output images from images
                 results_from_images = imagesInCodesAndImagesOut()
                 # get batch of codes from codes
-                codes_from_codes.append(codesInCodesOut())
+                inp_code_batch = get_input_code_batch(i)
+
+                # Assert if seeding works as intended - part 1
+                check(not np.all(inp_code_batch == prev_code_batch), "seeding not working correctly")
+                prev_code_batch = inp_code_batch
+
+                inp_codes.append(inp_code_batch)
+                codes_from_codes.append(codesInCodesOut(inp_code_batch))
+
                 assert (results_from_images[0].shape[0] == results_from_images[1].shape[0])
                 # If j == 0, collect codes; if j == 1, collect output images
                 for j in range(len(from_images)):
                     from_images[j].append(results_from_images[j])
 
+            # Assert if seeding works as intended - part 2
+            check(np.all(prev_code_batch == get_input_code_batch(num_eval_steps-1)), "seeding not working correctly")
+
+            # TO-DO: Refactorable - this can be summarized into a loop
+
             # lambda function that gets only used in the next 2 lines
             concat = lambda x: np.concatenate(x, axis=0)
+
             codes_from_images = concat(from_images[0])
             images_from_images = concat(from_images[1])
             codes_from_codes = concat(codes_from_codes)
+            inp_codes = concat(inp_codes)
 
             # TO-DO: Note to Hermann: Work on codes_from_codes
 
@@ -412,11 +439,20 @@ with tf.Session(config=config) as sess:
 
             MANH = 1
             EUCL = 2
-            avg_eucl_dist_images = get_avg_dist(EUCL, images_from_images, images)
+
+            get_avg_dist_images = lambda ord: get_avg_dist(ord, images_from_images, inp_images)
+            get_avg_dist_codes = lambda ord: get_avg_dist(ord, codes_from_codes, inp_codes)
+
+            avg_manh_dist_images = get_avg_dist_images(MANH)
+            avg_eucl_dist_images = get_avg_dist_images(EUCL)
+            avg_manh_dist_codes = get_avg_dist_codes(MANH)
+            avg_eucl_dist_codes = get_avg_dist_codes(EUCL)
+
+
 
             # TO-DO: remove this later on
             print(avg_eucl_dist_images)
-            reconstructed_latCode = codesInCodesOut()
+            #reconstructed_latCode = codesInCodesOut()
             l1_recLC_error = 1 #calculate manh. distance between reconstructed_latCode and latent_code_batch
             l2_recLC_error = 1 #calculate eukl. distance between reconstructed_latCode and latent_code_batch
 
