@@ -61,7 +61,7 @@ options['g_weight_decay_gen'] = 2.5e-5
 options['d_weight_decay_dis'] = 2.5e-5
 
 # False for normal running, start if you want it to enter the evaluation phase for each epoch
-test = False
+test = True
 
 # read configuration file
 config_name = sys.argv[1]
@@ -397,11 +397,25 @@ with tf.Session(config=config) as sess:
                 assert a.shape[0] == length_of_data_set
                 return np.reshape(a, (length_of_data_set, -1))
 
-            eucl_dist_images = np.linalg.norm(eval_shaped(images_from_images) - eval_shaped(images), ord=2, axis=1)
-            check(eucl_dist_images.shape == (length_of_data_set, ), eucl_dist_images.shape)
+            def get_avg_dist(ord, real, fake):
+                """
+                Calculates the avg distance between real and fake, where the distance metric is determined by ord
 
-            avg_eucl_dist_images = np.mean(eucl_dist_images)
+                :param ord: 1 for Manhattan, 2 for Euclidean distance
+                :param real:
+                :param fake:
+                :return:
+                """
+                dist_vect = np.linalg.norm(eval_shaped(real) - eval_shaped(fake), ord=2, axis=1)
+                check(dist_vect.shape == (length_of_data_set, ), dist_vect.shape)
+                return np.mean(dist_vect)
 
+            MANH = 1
+            EUCL = 2
+            avg_eucl_dist_images = get_avg_dist(EUCL, images_from_images, images)
+
+            # TO-DO: remove this later on
+            print(avg_eucl_dist_images)
             reconstructed_latCode = codesInCodesOut()
             l1_recLC_error = 1 #calculate manh. distance between reconstructed_latCode and latent_code_batch
             l2_recLC_error = 1 #calculate eukl. distance between reconstructed_latCode and latent_code_batch
