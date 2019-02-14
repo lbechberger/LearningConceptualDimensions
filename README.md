@@ -31,7 +31,6 @@ Required parameters:
 * `first_dim`: name of the first dimension from which to sample (any of: width, height, size, orientation)
 * `second_dim`: name of the second dimension from which to sample (any of: width, height, size, orientation)
 
-```
 
 ### Visualizing the data set
 The script `show_images.py` takes as argument the file name of the data set to visualize. It randomly selects twelve images from this data set and visualizes them to the user. This script can be used to double-check that reasonable images are generated.
