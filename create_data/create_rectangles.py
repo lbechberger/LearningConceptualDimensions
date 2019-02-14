@@ -9,10 +9,9 @@ Created on Wed Nov 29 11:12:51 2017
 @author: lbechberger
 """
 
-import pickle
+import pickle, argparse
 import numpy as np
 import scipy.ndimage.filters as filters
-import argparse
 
 # read command-line arguments
 parser = argparse.ArgumentParser(description='Rectangle generator')
@@ -40,7 +39,7 @@ borders = {'width' : (min_rectangle_size, max_rectangle_size),
                   'size' : (min_rectangle_size**2, max_rectangle_size**2),
                   'orientation' : (min_rectangle_size / min_rectangle_size + max_rectangle_size, max_rectangle_size / min_rectangle_size + max_rectangle_size)} 
 
-distributions = {'uniform' : lambda x: np.random.choice(range(x[0],x[1])), 
+distributions = {'uniform' : lambda x: np.random.choice(range(x[0], x[1] + 1, step_size)), 
                  'normal' : lambda x: np.random.normal(loc = np.mean(x), scale = np.mean(x)/3)}
 
 dataset = []
@@ -64,7 +63,7 @@ for i in range(args.n):
     generating_factors[args.first_dim] = distributions[args.type](borders[args.first_dim])
     generating_factors[args.second_dim] = distributions[args.type](borders[args.second_dim])
     
-    # compute the remaining ones: make sure that width and height are given    
+    # make sure that width and height are given    
     if 'width' in drawn_factors and 'height' in drawn_factors: 
         pass
     elif 'width' in drawn_factors and 'size' in drawn_factors:
@@ -88,7 +87,7 @@ for i in range(args.n):
     generating_factors['width'] = discretize(generating_factors['width'])
     generating_factors['height'] = discretize(generating_factors['height'])
 
-    # recompute remaining generating factors accordingly    
+    # recompute remaining generating factors based on new width and height    
     generating_factors['size'] = generating_factors['width'] * generating_factors['height']
     generating_factors['orientation'] = generating_factors['width'] / (generating_factors['width'] + generating_factors['height'])
 
@@ -128,8 +127,16 @@ with open(args.file_name, "wb") as f:
     
 if args.plot:
     from matplotlib import pyplot as plt
+    import os
+    
+    folder_name = os.path.dirname(args.file_name)
+    file_name = os.path.splitext(os.path.basename(args.file_name))[0]
     
     for factor in factor_names:
-        plt.hist(factor_history[factor])
+        plot_bins = range(int(borders[factor][0]), int(borders[factor][1]) + 3, step_size) if factor in ['width', 'height'] else None
+        plt.hist(factor_history[factor], bins = plot_bins)
         plt.title('distribution of {0}'.format(factor))
-        plt.show()
+        
+        output_file_name = os.path.join(folder_name, '{0}-{1}.png'.format(file_name, factor))
+        plt.savefig(output_file_name)
+        plt.close()
