@@ -12,7 +12,7 @@ The script `create_rectangles.py` creates a data set of rectangles. It has the f
 ```
 usage: create_rectangles.py [-h] [--image_size IMAGE_SIZE] [--mean MEAN]
                             [--variance VARIANCE] [--sigma SIGMA]
-                            [--type TYPE] [-p]
+                            [--type TYPE] [--seed SEED] [-p]
                             n file_name first_dim second_dim
 ```
 Optional parameters:
@@ -22,7 +22,8 @@ Optional parameters:
 * `--variance VARIANCE`: variance of the additive Gaussian noise (default: 0.05)
 * `--sigma SIGMA`: variance of the Gaussian filter used for blurring the images (default: 0.5)
 * `--type TYPE`: type of distribution from which the width and height values of the generated rectangles will be samples (default: uniform; can also be set to normal)
-* `-p` or `--plot`: plot histograms of the four dimensions
+* `--seed SEED`: seed used to initialize the random number generator
+* `-p` or `--plot`: plot histograms of the four dimensions and stores them in the same folder as the output pickle file
 
 Required parameters:
 * `n`: number of rectangles to generate
@@ -30,10 +31,6 @@ Required parameters:
 * `first_dim`: name of the first dimension from which to sample (any of: width, height, size, orientation)
 * `second_dim`: name of the second dimension from which to sample (any of: width, height, size, orientation)
 
-In order to create the rectangles data, please execute the following command from the project root directory:
-```
-python create_data/create_rectangles.py 10240 data/uniform.pickle width height
-python create_data/create_rectangles.py 10240 --type normal data/normal.pickle width height
 ```
 
 ### Visualizing the data set

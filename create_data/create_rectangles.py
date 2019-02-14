@@ -24,6 +24,7 @@ parser.add_argument("--mean", type = float, default = 0.0, help = 'mean of the G
 parser.add_argument("--variance", type = float, default = 0.05, help = 'variance of the Gaussian noise')
 parser.add_argument("--sigma", type = float, default = 0.5, help = 'variance of the Gaussian filter')
 parser.add_argument("--type", default = 'uniform', help = 'type of distribution to use')
+parser.add_argument("--seed", type = int, default = None, help = 'seed for random number generator')
 parser.add_argument("-p", "--plot", action = "store_true", help = 'triggers plotting of histograms')
 args = parser.parse_args()
 
@@ -53,6 +54,9 @@ drawn_factors = [args.first_dim, args.second_dim]
 
 if args.plot:
     factor_history = { 'width' : [], 'height' : [], 'size' : [], 'orientation' : [] }
+
+if args.seed != None:
+    np.random.seed(args.seed)
 
 for i in range(args.n):
     
@@ -133,7 +137,7 @@ if args.plot:
     file_name = os.path.splitext(os.path.basename(args.file_name))[0]
     
     for factor in factor_names:
-        plot_bins = range(int(borders[factor][0]), int(borders[factor][1]) + 3, step_size) if factor in ['width', 'height'] else None
+        plot_bins = range(int(borders[factor][0]), int(borders[factor][1]) + 3, step_size) if factor in ['width', 'height'] else 11
         plt.hist(factor_history[factor], bins = plot_bins)
         plt.title('distribution of {0}'.format(factor))
         
