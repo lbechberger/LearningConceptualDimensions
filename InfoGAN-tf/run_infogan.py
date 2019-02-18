@@ -62,7 +62,7 @@ options['g_weight_decay_gen'] = 2.5e-5
 options['d_weight_decay_dis'] = 2.5e-5
 
 # False for normal running, start if you want it to enter the evaluation phase for each epoch
-test = False
+test = True
 
 # read configuration file
 config_name = sys.argv[1]
@@ -419,6 +419,8 @@ with tf.Session(config=config) as sess:
             # TO-DO: Note to Hermann: Work on codes_from_codes
 
             def eval_shaped(a):
+                print(a.shape[0])
+                print(length_of_data_set)
                 assert a.shape[0] == length_of_data_set
                 return np.reshape(a, (length_of_data_set, -1))
 
