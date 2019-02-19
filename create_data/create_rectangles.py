@@ -9,10 +9,9 @@ Created on Wed Nov 29 11:12:51 2017
 @author: lbechberger
 """
 
-import pickle
+import pickle, argparse
 import numpy as np
 import scipy.ndimage.filters as filters
-import argparse
 
 # read command-line arguments
 parser = argparse.ArgumentParser(description='Rectangle generator')
@@ -25,6 +24,7 @@ parser.add_argument("--mean", type = float, default = 0.0, help = 'mean of the G
 parser.add_argument("--variance", type = float, default = 0.05, help = 'variance of the Gaussian noise')
 parser.add_argument("--sigma", type = float, default = 0.5, help = 'variance of the Gaussian filter')
 parser.add_argument("--type", default = 'uniform', help = 'type of distribution to use')
+parser.add_argument("--seed", type = int, default = None, help = 'seed for random number generator')
 parser.add_argument("-p", "--plot", action = "store_true", help = 'triggers plotting of histograms')
 args = parser.parse_args()
 
@@ -40,7 +40,7 @@ borders = {'width' : (min_rectangle_size, max_rectangle_size),
                   'size' : (min_rectangle_size**2, max_rectangle_size**2),
                   'orientation' : (min_rectangle_size / min_rectangle_size + max_rectangle_size, max_rectangle_size / min_rectangle_size + max_rectangle_size)} 
 
-distributions = {'uniform' : lambda x: np.random.choice(range(x[0],x[1])), 
+distributions = {'uniform' : lambda x: np.random.choice(range(x[0], x[1] + 1, step_size)), 
                  'normal' : lambda x: np.random.normal(loc = np.mean(x), scale = np.mean(x)/3)}
 
 dataset = []
@@ -55,6 +55,9 @@ drawn_factors = [args.first_dim, args.second_dim]
 if args.plot:
     factor_history = { 'width' : [], 'height' : [], 'size' : [], 'orientation' : [] }
 
+if args.seed != None:
+    np.random.seed(args.seed)
+
 for i in range(args.n):
     
     # initialize everything
@@ -64,7 +67,7 @@ for i in range(args.n):
     generating_factors[args.first_dim] = distributions[args.type](borders[args.first_dim])
     generating_factors[args.second_dim] = distributions[args.type](borders[args.second_dim])
     
-    # compute the remaining ones: make sure that width and height are given    
+    # make sure that width and height are given    
     if 'width' in drawn_factors and 'height' in drawn_factors: 
         pass
     elif 'width' in drawn_factors and 'size' in drawn_factors:
@@ -88,7 +91,7 @@ for i in range(args.n):
     generating_factors['width'] = discretize(generating_factors['width'])
     generating_factors['height'] = discretize(generating_factors['height'])
 
-    # recompute remaining generating factors accordingly    
+    # recompute remaining generating factors based on new width and height    
     generating_factors['size'] = generating_factors['width'] * generating_factors['height']
     generating_factors['orientation'] = generating_factors['width'] / (generating_factors['width'] + generating_factors['height'])
 
@@ -128,8 +131,16 @@ with open(args.file_name, "wb") as f:
     
 if args.plot:
     from matplotlib import pyplot as plt
+    import os
+    
+    folder_name = os.path.dirname(args.file_name)
+    file_name = os.path.splitext(os.path.basename(args.file_name))[0]
     
     for factor in factor_names:
-        plt.hist(factor_history[factor])
+        plot_bins = range(int(borders[factor][0]), int(borders[factor][1]) + 3, step_size) if factor in ['width', 'height'] else 11
+        plt.hist(factor_history[factor], bins = plot_bins)
         plt.title('distribution of {0}'.format(factor))
-        plt.show()
+        
+        output_file_name = os.path.join(folder_name, '{0}-{1}.png'.format(file_name, factor))
+        plt.savefig(output_file_name)
+        plt.close()
