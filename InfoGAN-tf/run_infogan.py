@@ -29,6 +29,7 @@ from datetime import datetime
 
 timestamp = str(datetime.now()).replace(' ', '-')
 
+
 def check(expected, print_if_err):
     """Check if expected occurs.
 
@@ -42,7 +43,6 @@ def check(expected, print_if_err):
             print("")
         print(print_if_err)
         assert expected
-
 
 
 # default values for options
@@ -201,7 +201,7 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
     Returns:
         Unstructured noise, continuous noise numpy arrays."""
     np.random.seed(seed=45)
-    rows, cols = 20, len(continuous_sample_points) 
+    rows, cols = 20, len(continuous_sample_points)
 
     # Take random draws for non-first-dim-continuous noise, making sure they are constant across columns.
     unstructured_noise = []
@@ -242,7 +242,7 @@ def get_eval_noise(noise_dims, continuous_sample_points, latent_dims, idx):
 
 
 def codesInCodesOut(lat_code_batch):
-    return sess.run(rec_lat_code, {latent_code_batch:lat_code_batch})
+    return sess.run(rec_lat_code, {latent_code_batch: lat_code_batch})
 
 
 def CodesInImageOut():
@@ -310,12 +310,12 @@ with tf.Session(config=config) as sess:
             print('Current loss: %f' % cur_loss)
 
         eval_condition = True
-        if(not test):
+        if (not test):
             eval_condition = (step + 1) in num_steps.keys()
         if eval_condition:
             # finished an epoch
             epoch = 1
-            if(not test):
+            if (not test):
                 epoch = num_steps[step + 1]
             print("finished epoch {0}".format(epoch))
 
@@ -349,14 +349,11 @@ with tf.Session(config=config) as sess:
                 return sess.run([latent_code, image_tensors_from_images])
 
 
-            
             # 3) Get reconstructed latent code
             CODEBATCHSHP = [options['batch_size'], options['latent_dims']]
 
             # sample batch_size many latent codes either from a uniform or normal distribution
             latent_code_batch = tf.placeholder(tf.float32, CODEBATCHSHP)
-
-            # prüfen ob random mit seed pro session gleiche werte ausgibt oder auch in session
 
             # generate an image with the sampled latent code batch
             # feed the generated image into the discriminator and save the reconstructed latent code
@@ -384,7 +381,6 @@ with tf.Session(config=config) as sess:
             from_images = [[], []]
             codes_from_codes = []
 
-
             prev_code_batch = 1
             # Each loop gets us one batch of codes and output images from images, as well as codes from codes
             for i in range(num_eval_steps):
@@ -406,7 +402,7 @@ with tf.Session(config=config) as sess:
                     from_images[j].append(results_from_images[j])
 
             # Assert if seeding works as intended - part 2
-            check(np.all(prev_code_batch == get_input_code_batch(num_eval_steps-1)), "seeding not working correctly")
+            check(np.all(prev_code_batch == get_input_code_batch(num_eval_steps - 1)), "seeding not working correctly")
 
             # TO-DO: Refactorable - this can be summarized into a loop
 
@@ -418,11 +414,13 @@ with tf.Session(config=config) as sess:
             codes_from_codes = concat(codes_from_codes)
             inp_codes = concat(inp_codes)
 
+
             # TO-DO: Note to Hermann: Work on codes_from_codes
 
             def eval_shaped(a):
                 assert a.shape[0] == length_of_data_set
                 return np.reshape(a, (length_of_data_set, -1))
+
 
             def get_avg_dist(ord, real, fake):
                 """
@@ -434,8 +432,9 @@ with tf.Session(config=config) as sess:
                 :return:
                 """
                 dist_vect = np.linalg.norm(eval_shaped(real) - eval_shaped(fake), ord=2, axis=1)
-                check(dist_vect.shape == (length_of_data_set, ), dist_vect.shape)
+                check(dist_vect.shape == (length_of_data_set,), dist_vect.shape)
                 return np.mean(dist_vect)
+
 
             MANH = 1
             EUCL = 2
@@ -460,13 +459,14 @@ with tf.Session(config=config) as sess:
 
             print(codeInImOut.shape)
 
-            #dump all of this into a pickle file for later use --'l2_recIm_error': avg_eucl_dist_images,
+            # dump all of this into a pickle file for later use
             eval_outputs = {'codes_from_images': codes_from_images,
                             'avg_manh_dist_images': avg_manh_dist_images,
                             'avg_eucl_dist_images': avg_eucl_dist_images,
                             'avg_manh_dist_codes': avg_manh_dist_codes,
                             'avg_eucl_dist_codes': avg_eucl_dist_codes,
                             'output_images_variing_lat_code': codeInImOut}
-            with open(os.path.join(options['output_dir'], "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
-               pickle.dump(eval_outputs, f)
+            with open(os.path.join(options['output_dir'],
+                                   "eval-{0}-ep{1}-{2}.pickle".format(config_name, epoch, timestamp)), 'wb') as f:
+                pickle.dump(eval_outputs, f)
 

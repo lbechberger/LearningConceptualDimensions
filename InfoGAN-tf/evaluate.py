@@ -15,10 +15,10 @@ def load_np_pickle(ind):
 config_name = 'foo'
 
 DEF = '-'
-# Initialize to_add with DEFault value
 to_add = {}
 # TO-DO: Add the remaining categories later on
 ORDERED_CATS = ['mseReg', 'r^2']
+# Initialize to_add with DEFault value
 for cat in ORDERED_CATS:
     to_add[cat] = DEF
 
@@ -56,18 +56,22 @@ def add_to_csv(ordered_cats, csv_name, to_add):
     :param to_add: dict that maps category names to their values
     :return: void
     """
+    import fcntl
+
     with open(csv_name, 'a', newline='') as csvfile:
+        fcntl.flock(csvfile, fcntl.LOCK_EX)
         keys = to_add.keys()
         for cat in ordered_cats:
             # If value for a cat(egory) is missing, fill in with '-'
             if not cat in keys:
                 to_add[cat] = '-'
         csv.writer(csvfile).writerow([to_add[cat] for cat in ordered_cats])
+        fcntl.flock(f, fcntl.LOCK_UN)
 
 def update_to_add(key, val):
     """
     Only allows val to be added to tp_add[key] if key is one of the categories in ORDERED_CATS.
-    Use this function whenever you want to use "to_add[someKey] = someVal"
+    Use this function instead whenever you want to use "to_add[someKey] = someVal"
 
     :param key:
     :param val:
