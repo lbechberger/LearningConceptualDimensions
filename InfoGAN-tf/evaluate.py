@@ -28,8 +28,7 @@ CSV_NAME = 'bla.csv'
 # Fail-fast if csv file does not exist or first line unequal to the categories
 with open(CSV_NAME, 'r', newline='') as csvfile:
     if not (ORDERED_CATS == next(csv.reader(csvfile))):
-        raise ValueError("CSVFile's first line unequal config/metric-names")    
-
+        raise ValueError("CSVFile's first line unequal config/metric-names")
 
 def reg_mse_and_score(inputs, labels):
     """
@@ -80,3 +79,16 @@ def update_to_add(key, val):
     if(key not in ORDERED_CATS):
         raise ValueError("IllegalKey")
     to_add[key] = val
+
+
+# retrieve reconstruction errors from pickle file
+def retrieve_rec_errors(ind):
+    pickle_file = load_np_pickle(ind)
+    codes_from_images = pickle_file[0]
+    avg_manh_dist_images = pickle_file[1]
+    avg_eucl_dist_images = pickle_file[2]
+    avg_manh_dist_codes = pickle_file[3]
+    avg_eucl_dist_codes = pickle_file[4]
+    output_images_variing_lat_code = pickle_file[5]
+    return (codes_from_images, avg_manh_dist_images, avg_eucl_dist_images, avg_manh_dist_codes, avg_eucl_dist_codes, output_images_variing_lat_code)
+
