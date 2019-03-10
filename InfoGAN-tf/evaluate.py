@@ -7,8 +7,8 @@ def load_np_pickle(ind):
     import sys
     pickle.load(open(sys.argv[ind], 'rb'), encoding='latin1')
 
-#input_data = load_np_pickle(0)
-#evaluation_data = load_np_pickle(1)
+input_data = load_np_pickle(0)
+evaluation_data = load_np_pickle(1)
 
 
 # TO-DO: Replace value later on
@@ -82,13 +82,11 @@ def update_to_add(key, val):
 
 
 # retrieve reconstruction errors from pickle file
-def retrieve_rec_errors(ind):
-    pickle_file = load_np_pickle(ind)
-    codes_from_images = pickle_file[0]
-    avg_manh_dist_images = pickle_file[1]
-    avg_eucl_dist_images = pickle_file[2]
-    avg_manh_dist_codes = pickle_file[3]
-    avg_eucl_dist_codes = pickle_file[4]
-    output_images_variing_lat_code = pickle_file[5]
-    return (codes_from_images, avg_manh_dist_images, avg_eucl_dist_images, avg_manh_dist_codes, avg_eucl_dist_codes, output_images_variing_lat_code)
+codes_from_images = evaluation_data[0]
+avg_manh_dist_images = evaluation_data[1]
+avg_eucl_dist_images = evaluation_data[2]
+avg_manh_dist_codes = evaluation_data[3]
+avg_eucl_dist_codes = evaluation_data[4]
+output_images_variing_lat_code = evaluation_data[5]
 
+training_file = '../data/uniform.pickle'
