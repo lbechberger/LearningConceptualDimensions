@@ -2,17 +2,57 @@ import numpy as np
 import sklearn as sk
 import csv
 
+# default values for options
+options = {}
+options['train_log_dir'] = 'logs'
+options['output_dir'] = 'output'
+options['training_file'] = '../data/uniform.pickle'
+options['noise_dims'] = 62
+options['latent_dims'] = 2
+options['batch_size'] = 128
+options['gen_lr'] = 1e-3
+options['dis_lr'] = 2e-4
+options['lambda'] = 1.0
+options['epochs'] = '50'
+options['type_latent'] = 'u'
+options['g_weight_decay_gen'] = 2.5e-5
+options['d_weight_decay_dis'] = 2.5e-5
+
+# execute script: python evaluate.py path/to/dataset.pickle path/to/evaluation.pickle
 def load_np_pickle(ind):
     import pickle
     import sys
     pickle.load(open(sys.argv[ind], 'rb'), encoding='latin1')
 
-input_data = load_np_pickle(0)
-evaluation_data = load_np_pickle(1)
+input_data = load_np_pickle(0)  # entweder normal.pickle oder uniform.pickle ??
+evaluation_data = load_np_pickle(1) 
+
+eval-{0}-ep{1}-{2}.pickle.format(config_name, epoch, timestamp) = sys.argv(1)
+
+def parse_range(key):
+    value = options[key]
+    parsed_value = ast.literal_eval(value)
+    if isinstance(parsed_value, list):
+        options[key] = parsed_value
+    else:
+        options[key] = [parsed_value]
 
 
-# TO-DO: Replace value later on
-config_name = 'foo'
+# overwrite default values for options
+if config.has_section(config_name):
+    options['train_log_dir'] = config.get(config_name, 'train_log_dir')
+    options['output_dir'] = config.get(config_name, 'output_dir')
+    options['training_file'] = config.get(config_name, 'training_file')
+    options['noise_dims'] = config.getint(config_name, 'noise_dims')
+    options['latent_dims'] = config.getint(config_name, 'latent_dims')
+    options['batch_size'] = config.getint(config_name, 'batch_size')
+    options['gen_lr'] = config.getfloat(config_name, 'gen_lr')
+    options['dis_lr'] = config.getfloat(config_name, 'dis_lr')
+    options['lambda'] = config.getfloat(config_name, 'lambda')
+    options['epochs'] = config.get(config_name, 'epochs')
+    options['type_latent'] = config.get(config_name, 'type_latent')
+    options['g_weight_decay_gen'] = config.get(config_name, 'g_weight_decay_gen')
+    options['d_weight_decay_dis'] = config.get(config_name, 'd_weight_decay_dis')
 
 DEF = '-'
 to_add = {}
@@ -89,4 +129,8 @@ avg_manh_dist_codes = evaluation_data[3]
 avg_eucl_dist_codes = evaluation_data[4]
 output_images_variing_lat_code = evaluation_data[5]
 
-training_file = '../data/uniform.pickle'
+
+for item in input_data:
+    mean_dif_vec = item[x] # feature: durchschnittlicher Differenz Vektor (pro batch)
+    const_factor =  item [x] # label: der Konstant gehaltene Faktor (kategorielle Variable)
+    training_set = ['feature': mean_dif_vec], ['label': const_factor]
