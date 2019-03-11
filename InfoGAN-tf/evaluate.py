@@ -24,10 +24,18 @@ def load_np_pickle(ind):
     import sys
     pickle.load(open(sys.argv[ind], 'rb'), encoding='latin1')
 
-input_data = load_np_pickle(0)  # entweder normal.pickle oder uniform.pickle ??
-evaluation_data = load_np_pickle(1) 
+input_dataset = load_np_pickle(0)  # entweder normal.pickle oder uniform.pickle ??
+evaluation_data = load_np_pickle(1)
 
-eval-{0}-ep{1}-{2}.pickle.format(config_name, epoch, timestamp) = sys.argv(1)
+evaluation_file = sys.argv(1)
+
+config_name = str.split(evaluation_file,"-")[1]
+epoch = str.split(evaluation_file,"-")[2].replace("ep","")
+timestamp = str.split(evaluation_file,"-")[3].replace(".pickle","")
+
+print(config_name)
+print(epoch)
+print(timestamp)
 
 def parse_range(key):
     value = options[key]
@@ -53,6 +61,21 @@ if config.has_section(config_name):
     options['type_latent'] = config.get(config_name, 'type_latent')
     options['g_weight_decay_gen'] = config.get(config_name, 'g_weight_decay_gen')
     options['d_weight_decay_dis'] = config.get(config_name, 'd_weight_decay_dis')
+
+
+# Set up the input
+input_data = pickle.load(open(options['training_file'], 'rb'), encoding='latin1')
+rectangles = np.array(list(map(lambda x: x[0], input_data['data'])), dtype=np.float32)
+labels = np.array(list(map(lambda x: x[1:], input_data['data'])), dtype=np.float32)
+dimension_names = input_data['dimensions']
+length_of_data_set = len(rectangles)
+inp_images = rectangles.reshape((-1, 28, 28, 1))
+dataset = tf.data.Dataset.from_tensor_slices((inp_images, labels))
+dataset_training = dataset.shuffle(20480).repeat().batch(options['batch_size'])
+dataset_evaluation = dataset.repeat().batch(options['batch_size'])
+batch_images_training = dataset_training.make_one_shot_iterator().get_next()[0]
+# batch_images_evaluation = dataset_evaluation.make_one_shot_iterator().get_next()[0]
+
 
 DEF = '-'
 to_add = {}
@@ -130,7 +153,7 @@ avg_eucl_dist_codes = evaluation_data[4]
 output_images_variing_lat_code = evaluation_data[5]
 
 
-for item in input_data:
+for item in input_dataset:
     mean_dif_vec = item[x] # feature: durchschnittlicher Differenz Vektor (pro batch)
     const_factor =  item [x] # label: der Konstant gehaltene Faktor (kategorielle Variable)
     training_set = ['feature': mean_dif_vec], ['label': const_factor]

@@ -12,7 +12,6 @@ Created on Thu Jan 25 2018
 import pickle
 import numpy as np
 import os, sys
-import fcntl
 import ast
 import functools
 import tensorflow as tf
@@ -32,7 +31,6 @@ timestamp = str(datetime.now()).replace(' ', '-')
 
 def check(expected, print_if_err):
     """Check if expected occurs.
-
     :param expected: true if correctly implemented
     :param error_msg: to print if expected is false
     :return: void
@@ -62,7 +60,7 @@ options['g_weight_decay_gen'] = 2.5e-5
 options['d_weight_decay_dis'] = 2.5e-5
 
 # False for normal running, start if you want it to enter the evaluation phase for each epoch
-test = True
+test = False
 
 # read configuration file
 config_name = sys.argv[1]
@@ -427,7 +425,6 @@ with tf.Session(config=config) as sess:
             def get_avg_dist(ord, real, fake):
                 """
                 Calculates the avg distance between real and fake, where the distance metric is determined by ord
-
                 :param ord: 1 for Manhattan, 2 for Euclidean distance
                 :param real:
                 :param fake:
